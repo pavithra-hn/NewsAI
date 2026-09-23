@@ -43,8 +43,7 @@ STYLE = """
   --graphite: #56606B;
   --rule: #C5CAC2;
   --cobalt: #1F45A8;
-  --plate: #F0B429;
-  --rivet: #B7851A;
+  --focus: #F0B429;
   --blocked: #A8231B;
   --display: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
   --ui: 'IBM Plex Sans', system-ui, sans-serif;
@@ -104,7 +103,7 @@ STYLE = """
 }
 .stButton button:focus-visible, .stTextArea textarea:focus-visible,
 .stTextInput input:focus-visible, .stApp [data-testid="stTab"]:focus-visible {
-  outline: 3px solid var(--plate); outline-offset: 2px;
+  outline: 3px solid var(--focus); outline-offset: 2px;
 }
 
 /* The article, as a reader sees it */
@@ -138,30 +137,8 @@ STYLE = """
   font-size: 1rem; line-height: 1.6;
 }
 
-/* The data plate: what the machine's own spec plate would say. */
-.stApp .plate {
-  margin-top: 1.1rem; padding: 0.85rem 1.35rem 0.95rem; border-radius: 3px; color: var(--ink);
-  background:
-    radial-gradient(circle at 9px 9px, var(--rivet) 2.4px, transparent 2.9px),
-    radial-gradient(circle at calc(100% - 9px) 9px, var(--rivet) 2.4px, transparent 2.9px),
-    radial-gradient(circle at 9px calc(100% - 9px), var(--rivet) 2.4px, transparent 2.9px),
-    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), var(--rivet) 2.4px, transparent 2.9px),
-    var(--plate);
-  font-family: var(--display); font-variant-numeric: tabular-nums;
-  animation: stamp 220ms ease-out both;
-}
-.stApp .plate-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1.8rem; }
-.stApp .plate-field { display: flex; flex-direction: column; }
-.stApp .plate-field b { font-size: 1.3rem; font-weight: 700; line-height: 1.15; }
-.stApp .plate-field span { font-size: 0.9rem; font-weight: 500; }
-.stApp .plate-kept {
-  margin-top: 0.65rem; padding-top: 0.55rem; font-size: 0.95rem;
-  border-top: 1px solid rgba(24, 34, 46, 0.35);
-}
-.stApp .plate-kept span { font-weight: 500; margin-right: 0.5rem; }
-.stApp .plate-kept b { display: inline-block; font-weight: 700; margin-right: 0.85rem; }
-@keyframes stamp { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .stApp .plate { animation: none; } }
+/* Length and time, quietly, under the quick read. */
+.stApp .qr-meta { margin: 0.9rem 0 0; color: var(--graphite); font-size: 0.92rem; font-family: var(--ui); }
 
 @media (max-width: 760px) {
   .stApp .mast-title { grid-template-columns: 1fr; gap: 0.25rem; white-space: normal; }
@@ -236,26 +213,9 @@ def article_html(locale: str, title: str, body_html: str) -> str:
     return "".join(parts)
 
 
-def plate_html(outcome: logic.RunOutcome) -> str:
-    result = outcome.result
-    fields = [
-        (str(len(result.text.split())), "words"),
-        (f"{outcome.seconds:.1f}", "seconds"),
-        (logic.format_cost(result), "cost"),
-    ]
-    row = "".join(
-        f'<div class="plate-field"><b>{html.escape(value)}</b><span>{label}</span></div>'
-        for value, label in fields
-    )
-    kept = logic.kept_exactly(result.text, outcome.cleaned_source)
-    kept_html = ""
-    if kept:
-        kept_html = (
-            '<div class="plate-kept"><span>Kept exactly</span>'
-            + "".join(f"<b>{html.escape(term)}</b>" for term in kept)
-            + "</div>"
-        )
-    return f'<div class="plate" dir="ltr"><div class="plate-row">{row}</div>{kept_html}</div>'
+def meta_html(outcome: logic.RunOutcome) -> str:
+    words = len(outcome.result.text.split())
+    return f'<p class="qr-meta" dir="ltr">{words} words, {outcome.seconds:.1f} seconds</p>'
 
 
 def quick_read_html(outcome: logic.RunOutcome, title: str) -> str:
@@ -275,7 +235,7 @@ def quick_read_html(outcome: logic.RunOutcome, title: str) -> str:
     # Model output is escaped before it reaches the page.
     return (
         f'<div class="qr" lang="{locale}"{rtl(locale)}>{head}{title_html}'
-        f'<p class="qr-text">{html.escape(result.text)}</p>{plate_html(outcome)}</div>'
+        f'<p class="qr-text">{html.escape(result.text)}</p>{meta_html(outcome)}</div>'
     )
 
 

@@ -309,40 +309,6 @@ def status_for(outcome: RunOutcome) -> tuple[str, list[str]]:
     return "Delivered", []
 
 
-# The data plate's "kept exactly" list.
-#
-# Read whole tokens, never fragments: French groups thousands with a space, so
-# 70 000 is one figure, and model codes carry hyphens and letters, so CQD20-G2,
-# 2C140 and 4×2 are each one term. A token is listed only if it carries a digit
-# and the article states it too. Tokens are compared folded (digit set, spaces,
-# thousands commas) but shown exactly as the quick read writes them.
-
-_TOKEN = re.compile(
-    r"\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?"
-    r"|[A-Za-z0-9٠-٩۰-۹]+(?:[-/×.,][A-Za-z0-9٠-٩۰-۹]+)*"
-)
-_ARABIC_INDIC = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
-MAX_KEPT = 6
-
-
-def _key(token: str) -> str:
-    folded = re.sub(r"[\s  ]", "", token.translate(_ARABIC_INDIC)).rstrip(".,")
-    if re.fullmatch(r"[\d.,]+", folded):
-        folded = folded.replace(",", "")
-    return folded
-
-
-def _terms(text: str) -> list[str]:
-    return [t.rstrip(".,") for t in _TOKEN.findall(text) if re.search(r"\d", _key(t))]
-
-
-def kept_exactly(summary: str, source: str) -> list[str]:
-    """Figures and model codes from the article that the quick read repeats."""
-    in_source = {_key(term) for term in _terms(source)}
-    kept = [term for term in _terms(summary) if len(_key(term)) > 1 and _key(term) in in_source]
-    return list(dict.fromkeys(kept))[:MAX_KEPT]
-
-
 def format_cost(result: QuickRead | None) -> str:
     if result is None or not result.cost_known:
         return "unknown"

@@ -385,46 +385,6 @@ def test_an_over_long_summary_is_explained_in_plain_english():
     assert "over_length" not in reasons[0]
 
 
-# The data plate's "kept exactly" list: figures from the article that the quick
-# read repeats, shown whole, in the article's own form.
-
-
-def test_french_numbers_with_spaces_are_kept_whole():
-    source = "Le projet offrira environ 70 000 pieds carrés et accueillera 20 000 habitants en 2027."
-    summary = "Le complexe de 70 000 pieds carrés, prévu pour 2027, accueillera 20 000 habitants."
-    assert logic.kept_exactly(summary, source) == ["70 000", "2027", "20 000"]
-
-
-def test_english_thousands_are_kept_whole_and_punctuation_is_dropped():
-    source = "About 70,000 square feet over 26 stores, open in 2027."
-    summary = "It offers 70,000 square feet across 26 stores, opening in 2027."
-    assert logic.kept_exactly(summary, source) == ["70,000", "26", "2027"]
-
-
-def test_a_figure_the_article_never_gives_is_not_listed():
-    source = "Volvo delivered twelve EC220 excavators in 2025."
-    summary = "Volvo delivered 99 EC220 excavators in 2025."
-    assert "99" not in logic.kept_exactly(summary, source)
-
-
-def test_model_codes_come_first_and_their_digits_are_not_repeated():
-    source = "More than AED750 million in contracts, and 222 homes."
-    summary = "Contracts worth AED750 million and 222 homes."
-    assert logic.kept_exactly(summary, source) == ["AED750", "222"]
-
-
-def test_single_digits_are_left_out():
-    source = "Two phases, 2 and 3, and 150 trucks."
-    summary = "The plan covers phases 2 and 3 and 150 trucks."
-    assert logic.kept_exactly(summary, source) == ["150"]
-
-
-def test_arabic_indic_digits_match_the_article():
-    source = "تسليم 222 منزلاً في 2026"
-    summary = "تسليم ٢٢٢ منزلاً"
-    assert logic.kept_exactly(summary, source) == ["٢٢٢"]
-
-
 # One pasted article: its language is detected, not chosen.
 
 
@@ -461,21 +421,3 @@ def test_the_pasted_client_carries_an_optional_title():
 def test_an_article_is_split_into_its_paragraphs_for_reading():
     body = "<p>First <b>paragraph</b>.</p><p>&nbsp;</p><p>Second&nbsp;one.</p>"
     assert logic.paragraphs(body) == ["First paragraph .", "Second one."]
-
-
-def test_hyphenated_model_codes_are_kept_whole():
-    source = "HELI shows the CQD20-G2 reach truck and the CDD20J-LI stacker."
-    summary = "HELI will show its CQD20-G2 and CDD20J-LI machines."
-    assert logic.kept_exactly(summary, source) == ["CQD20-G2", "CDD20J-LI"]
-
-
-def test_a_code_is_not_broken_into_a_stray_number():
-    source = "HELI is exhibiting at Booth 2C140 in Riyadh."
-    summary = "HELI will be at Booth 2C140."
-    assert logic.kept_exactly(summary, source) == ["2C140"]
-
-
-def test_a_drivetrain_specification_is_kept_whole():
-    source = "The SINOTRUK MAX 4×2 tractor heads arrived."
-    summary = "Sinotruk delivered MAX 4×2 tractor heads."
-    assert logic.kept_exactly(summary, source) == ["4×2"]

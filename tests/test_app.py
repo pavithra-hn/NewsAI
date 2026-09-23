@@ -184,16 +184,16 @@ def test_the_article_and_the_quick_read_are_labelled_apart(stub):
     assert 'class="qr' in text
 
 
-def test_each_quick_read_shows_words_time_and_cost(stub):
+def test_each_quick_read_shows_its_length_and_time(stub):
     text = page_text(paste(start(), body=ENGLISH))
-    assert "words" in text and "seconds" in text and "$0.000100" in text
+    assert "words" in text and "seconds" in text
 
 
-def test_the_figures_kept_exactly_are_listed(stub):
-    # The stub's English quick read carries EC220, which the article states.
+def test_there_is_no_cost_or_figures_plate(stub):
     text = page_text(paste(start(), body=ENGLISH))
-    assert "Kept exactly" in text
-    assert "EC220" in text
+    assert "$0.000100" not in text
+    assert "Kept exactly" not in text
+    assert 'class="plate' not in text
 
 
 def test_there_is_no_checking_panel_to_confuse_a_reader(stub):
