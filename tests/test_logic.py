@@ -328,27 +328,7 @@ def test_the_counter_is_safe_across_threads():
     assert counter.remaining() == 0
 
 
-# Configuration. The gate never falls open.
-
-
-@pytest.mark.parametrize("value", [None, "", "   "])
-def test_an_unset_password_means_not_configured(value):
-    env = {} if value is None else {"DEMO_PASSWORD": value}
-    assert logic.demo_password(env, {}) is None
-
-
-def test_the_password_can_come_from_streamlit_secrets():
-    assert logic.demo_password({}, {"DEMO_PASSWORD": "s3cret"}) == "s3cret"
-
-
-def test_the_environment_wins_over_secrets():
-    assert logic.demo_password({"DEMO_PASSWORD": "env"}, {"DEMO_PASSWORD": "sec"}) == "env"
-
-
-def test_password_matching():
-    assert logic.password_matches("s3cret", "s3cret") is True
-    assert logic.password_matches("S3cret", "s3cret") is False
-    assert logic.password_matches("", "s3cret") is False
+# Configuration.
 
 
 def test_the_daily_limit_defaults_to_200():
@@ -403,3 +383,99 @@ def test_an_over_long_summary_is_explained_in_plain_english():
     assert "73 words" in reasons[0]
     assert "Longer than intended" in reasons[0]
     assert "over_length" not in reasons[0]
+
+
+# The data plate's "kept exactly" list: figures from the article that the quick
+# read repeats, shown whole, in the article's own form.
+
+
+def test_french_numbers_with_spaces_are_kept_whole():
+    source = "Le projet offrira environ 70 000 pieds carrés et accueillera 20 000 habitants en 2027."
+    summary = "Le complexe de 70 000 pieds carrés, prévu pour 2027, accueillera 20 000 habitants."
+    assert logic.kept_exactly(summary, source) == ["70 000", "2027", "20 000"]
+
+
+def test_english_thousands_are_kept_whole_and_punctuation_is_dropped():
+    source = "About 70,000 square feet over 26 stores, open in 2027."
+    summary = "It offers 70,000 square feet across 26 stores, opening in 2027."
+    assert logic.kept_exactly(summary, source) == ["70,000", "26", "2027"]
+
+
+def test_a_figure_the_article_never_gives_is_not_listed():
+    source = "Volvo delivered twelve EC220 excavators in 2025."
+    summary = "Volvo delivered 99 EC220 excavators in 2025."
+    assert "99" not in logic.kept_exactly(summary, source)
+
+
+def test_model_codes_come_first_and_their_digits_are_not_repeated():
+    source = "More than AED750 million in contracts, and 222 homes."
+    summary = "Contracts worth AED750 million and 222 homes."
+    assert logic.kept_exactly(summary, source) == ["AED750", "222"]
+
+
+def test_single_digits_are_left_out():
+    source = "Two phases, 2 and 3, and 150 trucks."
+    summary = "The plan covers phases 2 and 3 and 150 trucks."
+    assert logic.kept_exactly(summary, source) == ["150"]
+
+
+def test_arabic_indic_digits_match_the_article():
+    source = "تسليم 222 منزلاً في 2026"
+    summary = "تسليم ٢٢٢ منزلاً"
+    assert logic.kept_exactly(summary, source) == ["٢٢٢"]
+
+
+# One pasted article: its language is detected, not chosen.
+
+
+@pytest.mark.parametrize("text,expected", [(ENGLISH, "en"), (FRENCH, "fr"), (ARABIC, "ar")])
+def test_a_pasted_article_is_checked_in_its_detected_language(text, expected):
+    check = logic.check_paste(text)
+    assert check.ok and check.locale == expected
+
+
+def test_an_empty_paste_is_reported_as_empty():
+    check = logic.check_paste("   ")
+    assert not check.ok and check.reason == "empty"
+
+
+def test_a_short_paste_is_too_short():
+    check = logic.check_paste("Volvo delivered ten excavators in Dubai today.")
+    assert not check.ok and check.reason == "too_short"
+    assert "Too short to summarise" in check.message
+
+
+def test_a_paste_with_no_clear_language_is_refused():
+    check = logic.check_paste(" ".join(["2026"] * 60))
+    assert not check.ok and check.reason == "no_language"
+    assert "language" in check.message.lower()
+
+
+def test_the_pasted_client_carries_an_optional_title():
+    client = logic.PastedClient({"en": ENGLISH}, titles={"en": "Volvo in Oman"})
+    assert asyncio.run(client.fetch_article(0, "en")).title == "Volvo in Oman"
+    untitled = logic.PastedClient({"en": ENGLISH})
+    assert asyncio.run(untitled.fetch_article(0, "en")).title is None
+
+
+def test_an_article_is_split_into_its_paragraphs_for_reading():
+    body = "<p>First <b>paragraph</b>.</p><p>&nbsp;</p><p>Second&nbsp;one.</p>"
+    assert logic.paragraphs(body) == ["First paragraph .", "Second one."]
+
+
+def test_hyphenated_model_codes_are_kept_whole():
+    source = "HELI shows the CQD20-G2 reach truck and the CDD20J-LI stacker."
+    summary = "HELI will show its CQD20-G2 and CDD20J-LI machines."
+    assert logic.kept_exactly(summary, source) == ["CQD20-G2", "CDD20J-LI"]
+
+
+def test_a_code_is_not_broken_into_a_stray_number():
+    source = "HELI is exhibiting at Booth 2C140 in Riyadh."
+    summary = "HELI will be at Booth 2C140."
+    assert logic.kept_exactly(summary, source) == ["2C140"]
+
+
+def test_a_drivetrain_specification_is_kept_whole():
+    source = "The SINOTRUK MAX 4×2 tractor heads arrived."
+    summary = "Sinotruk delivered MAX 4×2 tractor heads."
+    assert logic.kept_exactly(summary, source) == ["4×2"]

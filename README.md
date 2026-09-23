@@ -1,15 +1,16 @@
 # NewsAI quick read demo
 
-A password-protected page for trying the NewsAiHelper quick read pipeline. Paste
-a news article in English, Arabic or French, or pick one of 25 published sample
-articles, and get a short quick read in that same language.
+A page for trying the NewsAiHelper quick read pipeline. Paste a news article, with
+a title if it has one, in English, Arabic or French, or pick one of 25 published
+sample articles and read it first. The quick read appears beside the article, in
+that article's own language.
 
 **This is a demo. It is not connected to MakinatyNews.** It runs the real
 pipeline from `news-ai-helper` against text you give it. The page shows which
 pipeline version it runs.
 
-Nothing is translated. Each language is summarised from its own text, so a box
-refuses text in a different language rather than silently translating it.
+Nothing is translated. The language of a pasted article is detected from its
+text, and it is summarised in that language.
 
 ## Requirements
 
@@ -50,7 +51,6 @@ copy .env.example .env                       # macOS or Linux: cp
 
 | Variable | Purpose |
 |---|---|
-| `DEMO_PASSWORD` | Password for the page. If unset, the page refuses to open |
 | `DEMO_DAILY_LIMIT` | Runs allowed per day across all visitors. Default 200 |
 | `PROVIDER_BASE_URL` | Model provider endpoint |
 | `PROVIDER_API_KEY` | Model provider key. Secret |
@@ -70,8 +70,7 @@ From the repository root:
 streamlit run demo/streamlit_app.py
 ```
 
-Each language box, or each language of a sample, counts as one run against the
-daily limit. The count lives in memory and resets when the app restarts.
+Each quick read counts as one run against the daily limit. The count lives in memory and resets when the app restarts.
 
 ## Tests
 
@@ -111,6 +110,7 @@ include it.
 
 ```
 demo/streamlit_app.py  the page
+.streamlit/config.toml the page's colours and chrome (not a secret)
 demo/logic.py          everything the page does: checks, running, limits, settings
 demo/bootstrap.py      copies Streamlit secrets into the environment, first
 app/                   the pipeline snapshot, see PIPELINE_VERSION

@@ -8,10 +8,9 @@ from streamlit.testing.v1 import AppTest
 
 from app.providers.base import Completion, ProviderError
 from demo import logic
-from tests.test_logic import ARABIC, ENGLISH, FRENCH
+from tests.test_logic import ARABIC, CORPUS, ENGLISH, FRENCH
 
 APP = str(Path(__file__).resolve().parents[1] / "demo" / "streamlit_app.py")
-PASSWORD = "correct horse"
 
 REPLIES = {
     "English": "Volvo delivered twelve EC220 excavators to an Omani quarry operator.",
@@ -21,17 +20,19 @@ REPLIES = {
 
 
 class Stub:
-    """Answers in whichever language the prompt asks for."""
+    """Answers in whichever language the prompt asks for, and keeps the prompts."""
 
     def __init__(self, fail=None):
         self.fail = fail
         self.calls = 0
+        self.prompts = []
 
     def __call__(self):
         return self
 
     async def complete(self, messages, *, model, temperature=0.3, max_tokens=400):
         self.calls += 1
+        self.prompts.append("\n".join(m["content"] for m in messages))
         if self.fail is not None:
             raise self.fail
         language = next(name for name in REPLIES if f"Write in {name}" in messages[0]["content"])
@@ -48,9 +49,7 @@ class Stub:
 def stub(monkeypatch, tmp_path):
     # A developer's .env must not leak into these runs.
     monkeypatch.chdir(tmp_path)
-    for name in ("DEMO_PASSWORD", "DEMO_DAILY_LIMIT"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("DEMO_PASSWORD", PASSWORD)
+    monkeypatch.delenv("DEMO_DAILY_LIMIT", raising=False)
     st.cache_resource.clear()
 
     provider = Stub()
@@ -65,12 +64,6 @@ def start():
     return at
 
 
-def signed_in():
-    at = start()
-    at.text_input(key="password").input(PASSWORD).run()
-    return at
-
-
 def page_text(at):
     parts = []
     for kind in ("markdown", "caption", "success", "warning", "error", "info", "subheader"):
@@ -82,43 +75,36 @@ def no_crash(at):
     assert not at.exception, [e.value for e in at.exception]
 
 
-# The gate.
+def paste(at, body="", title=""):
+    at.text_input(key="paste_title").input(title)
+    at.text_area(key="paste_body").input(body)
+    at.button(key="paste_go").click().run()
+    return at
 
 
-def test_an_unset_password_shows_not_configured_and_nothing_else(stub, monkeypatch):
-    monkeypatch.delenv("DEMO_PASSWORD")
+# Opening the page.
+
+
+def test_the_page_opens_straight_away_with_no_password(stub):
     at = start()
-
-    no_crash(at)
-    assert any("not configured" in e.value.lower() for e in at.error)
-    assert len(at.text_input) == 0
-    assert len(at.tabs) == 0
-
-
-def test_nothing_renders_before_the_password(stub):
-    at = start()
-
-    no_crash(at)
-    assert len(at.text_input) == 1
-    assert len(at.tabs) == 0
-    assert "Not yet connected" not in page_text(at)
-
-
-def test_a_wrong_password_is_refused(stub):
-    at = start()
-    at.text_input(key="password").input("wrong").run()
-
-    no_crash(at)
-    assert any("incorrect password" in e.value.lower() for e in at.error)
-    assert len(at.tabs) == 0
-
-
-def test_the_right_password_opens_the_page(stub):
-    at = signed_in()
 
     no_crash(at)
     assert [tab.label for tab in at.tabs] == ["Paste article", "Sample articles"]
-    assert "Demo. Not yet connected to MakinatyNews." in page_text(at)
+    assert [t.key for t in at.text_input] == ["paste_title"]
+
+
+def test_the_headline_is_quick_read_in_all_three_languages(stub):
+    text = page_text(start())
+    for name in ("Quick read", "Lecture rapide", "قراءة سريعة"):
+        assert name in text
+
+
+def test_the_page_carries_no_internal_notices(stub):
+    commit = (Path(APP).parents[1] / "PIPELINE_VERSION").read_text().split()[0]
+    text = page_text(start())
+    assert "Not yet connected" not in text
+    assert "Pipeline version" not in text
+    assert commit[:7] not in text
 
 
 def test_an_invalid_daily_limit_means_not_configured(stub, monkeypatch):
@@ -132,97 +118,148 @@ def test_an_invalid_daily_limit_means_not_configured(stub, monkeypatch):
 
 def test_a_missing_provider_key_means_not_configured(stub, monkeypatch):
     monkeypatch.setattr(logic, "provider_ready", lambda: False)
-    at = signed_in()
+    at = start()
 
     no_crash(at)
     assert any("not configured" in e.value.lower() for e in at.error)
     assert len(at.tabs) == 0
 
 
-# Paste tab.
+def test_both_buttons_say_quick_read_like_the_real_product(stub):
+    at = start()
+    assert at.button(key="paste_go").label == "Quick read"
+    assert at.button(key="sample_go").label == "Quick read"
 
 
-def paste(at, **texts):
-    for locale, text in texts.items():
-        at.text_area(key=f"paste_{locale}").input(text)
-    at.button(key="paste_go").click().run()
-    return at
+# Paste tab: one article, a title if you have one, one quick read back.
 
 
-def test_three_boxes_run_together(stub):
-    at = paste(signed_in(), en=ENGLISH, ar=ARABIC, fr=FRENCH)
-
-    no_crash(at)
-    text = page_text(at)
-    for reply in REPLIES.values():
-        assert reply in text
-    assert text.count("Delivered") >= 3
-    assert stub.calls == 3
+def test_the_paste_tab_has_one_title_and_one_content_box(stub):
+    at = start()
+    assert at.text_input(key="paste_title").label == "Title"
+    assert at.text_area(key="paste_body").label == "Content"
 
 
-def test_the_arabic_quick_read_is_right_to_left(stub):
-    at = paste(signed_in(), ar=ARABIC)
-
-    assert any('dir="rtl"' in m.value and REPLIES["Arabic"] in m.value for m in at.markdown)
-
-
-def test_each_result_shows_words_time_and_cost(stub):
-    at = paste(signed_in(), en=ENGLISH)
-
-    captions = " ".join(c.value for c in at.caption)
-    assert "words" in captions and "s" in captions and "$0.000100" in captions
-
-
-def test_empty_boxes_ask_for_an_article(stub):
-    at = paste(signed_in())
-
-    no_crash(at)
-    assert "Paste an article into at least one box." in page_text(at)
-    assert stub.calls == 0
-
-
-def test_a_short_box_is_refused_without_blocking_the_others(stub):
-    at = paste(signed_in(), en="Too short to be an article at all, ten words.", fr=FRENCH)
+def test_an_english_article_gets_only_an_english_quick_read(stub):
+    at = paste(start(), body=ENGLISH)
 
     no_crash(at)
     text = page_text(at)
-    assert "Too short to summarise" in text
-    assert REPLIES["French"] in text
+    assert REPLIES["English"] in text
+    assert REPLIES["French"] not in text and REPLIES["Arabic"] not in text
     assert stub.calls == 1
 
 
-def test_arabic_in_the_english_box_is_not_run(stub):
-    at = paste(signed_in(), en=ARABIC)
+def test_the_language_is_detected_from_the_content(stub):
+    at = paste(start(), body=FRENCH)
 
     no_crash(at)
-    assert "does not translate" in page_text(at)
+    assert REPLIES["French"] in page_text(at)
+    assert "Write in French" in stub.prompts[0]
+
+
+def test_an_arabic_quick_read_is_right_to_left(stub):
+    at = paste(start(), body=ARABIC)
+
+    no_crash(at)
+    assert any('dir="rtl"' in m.value and REPLIES["Arabic"] in m.value for m in at.markdown)
+
+
+def test_the_title_is_given_to_the_model(stub):
+    paste(start(), body=ENGLISH, title="Volvo delivers twelve excavators to Oman")
+    assert "Volvo delivers twelve excavators to Oman" in stub.prompts[0]
+
+
+def test_the_title_is_optional(stub):
+    at = paste(start(), body=ENGLISH, title="")
+
+    no_crash(at)
+    assert REPLIES["English"] in page_text(at)
+
+
+def test_the_article_and_the_quick_read_are_labelled_apart(stub):
+    text = page_text(paste(start(), body=ENGLISH, title="Volvo in Oman"))
+    assert "Your article" in text
+    assert "Volvo in Oman" in text
+    assert 'class="qr' in text
+
+
+def test_each_quick_read_shows_words_time_and_cost(stub):
+    text = page_text(paste(start(), body=ENGLISH))
+    assert "words" in text and "seconds" in text and "$0.000100" in text
+
+
+def test_the_figures_kept_exactly_are_listed(stub):
+    # The stub's English quick read carries EC220, which the article states.
+    text = page_text(paste(start(), body=ENGLISH))
+    assert "Kept exactly" in text
+    assert "EC220" in text
+
+
+def test_there_is_no_checking_panel_to_confuse_a_reader(stub):
+    at = paste(start(), body=ENGLISH)
+    assert len(at.expander) == 0
+
+
+def test_an_empty_box_asks_for_an_article(stub):
+    at = paste(start(), body="")
+
+    no_crash(at)
+    assert "Paste an article" in page_text(at)
     assert stub.calls == 0
 
 
-# Sample tab.
+def test_a_short_article_is_refused(stub):
+    at = paste(start(), body="Too short to be an article at all, ten words.")
+
+    no_crash(at)
+    assert "Too short to summarise" in page_text(at)
+    assert stub.calls == 0
 
 
-def test_a_sample_in_all_three_languages(stub):
-    at = signed_in()
+def test_text_with_no_clear_language_is_refused(stub):
+    at = paste(start(), body=" ".join(["2026"] * 60))
+
+    no_crash(at)
+    assert "language" in page_text(at).lower()
+    assert stub.calls == 0
+
+
+# Sample tab: pick an article and a language, read it, then summarise it.
+
+
+def test_choosing_a_sample_shows_its_title_and_content_straight_away(stub):
+    at = start()
     at.selectbox(key="sample_article").select(0)
-    at.radio(key="sample_lang").set_value("All three")
+    at.radio(key="sample_lang").set_value("English").run()
+
+    no_crash(at)
+    text = page_text(at)
+    article = CORPUS[0]["locales"]["en"]
+    assert article["title"] in text
+    assert "Manitou" in text
+    assert stub.calls == 0
+
+
+def test_switching_the_sample_language_shows_that_version(stub):
+    at = start()
+    at.selectbox(key="sample_article").select(0)
+    at.radio(key="sample_lang").set_value("العربية").run()
+
+    no_crash(at)
+    assert CORPUS[0]["locales"]["ar"]["title"] in page_text(at)
+
+
+def test_a_sample_quick_read_is_one_language(stub):
+    at = start()
+    at.selectbox(key="sample_article").select(11)
+    at.radio(key="sample_lang").set_value("English").run()
     at.button(key="sample_go").click().run()
 
     no_crash(at)
     text = page_text(at)
-    for reply in REPLIES.values():
-        assert reply in text
-    assert stub.calls == 3
-
-
-def test_a_sample_in_one_language(stub):
-    at = signed_in()
-    at.selectbox(key="sample_article").select(11)
-    at.radio(key="sample_lang").set_value("English")
-    at.button(key="sample_go").click().run()
-
-    no_crash(at)
-    assert REPLIES["English"] in page_text(at)
+    assert REPLIES["English"] in text
+    assert REPLIES["French"] not in text
     assert stub.calls == 1
 
 
@@ -231,7 +268,7 @@ def test_a_sample_in_one_language(stub):
 
 def test_a_provider_outage_is_a_polite_message(stub):
     stub.fail = ProviderError("gave up after 3 attempts: 503 from the provider")
-    at = paste(signed_in(), en=ENGLISH)
+    at = paste(start(), body=ENGLISH)
 
     no_crash(at)
     text = page_text(at)
@@ -241,7 +278,7 @@ def test_a_provider_outage_is_a_polite_message(stub):
 
 def test_an_unexpected_error_is_not_a_traceback(stub):
     stub.fail = RuntimeError("something internal")
-    at = paste(signed_in(), en=ENGLISH)
+    at = paste(start(), body=ENGLISH)
 
     no_crash(at)
     text = page_text(at)
@@ -250,33 +287,27 @@ def test_an_unexpected_error_is_not_a_traceback(stub):
 
 
 def test_the_daily_limit_is_polite_and_spends_nothing(stub, monkeypatch):
-    monkeypatch.setenv("DEMO_DAILY_LIMIT", "2")
-    at = paste(signed_in(), en=ENGLISH, ar=ARABIC, fr=FRENCH)
+    monkeypatch.setenv("DEMO_DAILY_LIMIT", "1")
+    at = paste(start(), body=ENGLISH)
+    at.button(key="paste_go").click().run()
 
     no_crash(at)
     assert "daily limit" in page_text(at).lower()
-    assert stub.calls == 0
+    assert stub.calls == 1
 
 
 def test_model_output_is_escaped_not_rendered_as_html(stub):
-    REPLIES_BEFORE = dict(REPLIES)
+    before = dict(REPLIES)
     REPLIES["English"] = "Volvo <script>alert(1)</script> delivered twelve excavators."
     try:
-        at = paste(signed_in(), en=ENGLISH)
+        at = paste(start(), body=ENGLISH)
         assert not any("<script>" in m.value for m in at.markdown)
         assert any("&lt;script&gt;" in m.value for m in at.markdown)
     finally:
         REPLIES.clear()
-        REPLIES.update(REPLIES_BEFORE)
+        REPLIES.update(before)
 
 
-def test_both_buttons_say_quick_read_like_the_real_product(stub):
-    at = signed_in()
-    assert at.button(key="paste_go").label == "Quick read"
-    assert at.button(key="sample_go").label == "Quick read"
-
-
-def test_the_page_shows_which_pipeline_version_it_runs(stub):
-    commit = (Path(APP).parents[1] / "PIPELINE_VERSION").read_text().split()[0]
-    at = signed_in()
-    assert commit[:7] in page_text(at)
+def test_a_pasted_title_is_escaped_too(stub):
+    at = paste(start(), body=ENGLISH, title="<b>Bold</b> headline")
+    assert not any("<b>Bold</b>" in m.value for m in at.markdown)

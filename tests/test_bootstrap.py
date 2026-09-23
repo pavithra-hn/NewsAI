@@ -46,17 +46,20 @@ def test_a_key_that_exists_only_in_streamlit_secrets_opens_the_page(tmp_path):
     # on the cloud. No environment variables: the secrets are the only source.
     script = f"""
 import os
-for name in ("PROVIDER_API_KEY", "DEMO_PASSWORD", "DEMO_DAILY_LIMIT", "MODELS"):
+for name in ("PROVIDER_API_KEY", "DEMO_DAILY_LIMIT", "MODELS"):
     os.environ.pop(name, None)
 os.chdir({str(tmp_path)!r})
 from streamlit.testing.v1 import AppTest
 at = AppTest.from_file({str(ROOT / "demo" / "streamlit_app.py")!r}, default_timeout=60)
-at.secrets["DEMO_PASSWORD"] = "pw"
 at.secrets["PROVIDER_API_KEY"] = "secret-only-key"
 at.run()
-at.text_input(key="password").input("pw").run()
 text = " ".join(str(e.value) for e in list(at.error) + list(at.exception))
-print("KEY MISSING" if "key is missing" in text else ("ERROR " + text if text else "OPEN"))
+if "key is missing" in text:
+    print("KEY MISSING")
+elif text:
+    print("ERROR " + text)
+else:
+    print("OPEN" if len(at.tabs) == 2 else "NO TABS")
 """
     out = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=120, check=False

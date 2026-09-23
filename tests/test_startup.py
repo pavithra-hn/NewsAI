@@ -22,13 +22,13 @@ at = AppTest.from_file(sys.argv[1], default_timeout=60)
 at.run()
 problems = [e.message for e in at.exception]
 print("EXCEPTIONS", problems)
-print("PASSWORD_INPUTS", len(at.text_input))
-sys.exit(1 if problems or len(at.text_input) != 1 else 0)
+print("TABS", len(at.tabs))
+sys.exit(1 if problems or len(at.tabs) != 2 else 0)
 """
 
 
 def test_the_page_starts_in_a_fresh_interpreter(tmp_path):
-    env = {**os.environ, "DEMO_PASSWORD": "fresh-start-check", "PYTHONIOENCODING": "utf-8"}
+    env = {**os.environ, "PROVIDER_API_KEY": "fresh-start-check", "PYTHONIOENCODING": "utf-8"}
     env.pop("PYTHONPATH", None)
 
     run = subprocess.run(
@@ -37,7 +37,7 @@ def test_the_page_starts_in_a_fresh_interpreter(tmp_path):
     )
 
     assert run.returncode == 0, run.stdout[-2000:] + run.stderr[-2000:]
-    assert "PASSWORD_INPUTS 1" in run.stdout
+    assert "TABS 2" in run.stdout
 
 
 def test_nothing_in_demo_can_shadow_the_pipeline_package():

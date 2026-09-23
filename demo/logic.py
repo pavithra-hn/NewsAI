@@ -5,7 +5,6 @@ not copied: it is imported from news-ai-helper exactly as its own CLI uses it.
 """
 
 import asyncio
-import hmac
 import logging
 import re
 import threading
@@ -84,6 +83,12 @@ def detect_language(text: str) -> str | None:
     return "fr" if french > english else "en"
 
 
+def paragraphs(body_html: str) -> list[str]:
+    """An article's paragraphs as plain text, for showing it to a reader."""
+    parts = re.split(r"</p\s*>|<br\s*/?>", body_html or "", flags=re.IGNORECASE)
+    return [text for text in (clean(part) for part in parts) if text]
+
+
 # Checking a box before anything is spent on it.
 
 
@@ -130,14 +135,58 @@ def check_box(text: str, locale: str) -> BoxCheck:
     return BoxCheck(locale, True, None, "", words)
 
 
+def check_paste(text: str) -> BoxCheck:
+    """Check one pasted article, in the language it is written in.
+
+    The language is detected rather than chosen, so a reader pastes and presses
+    one button. Text too thin to tell the language from is refused, because
+    guessing would mean summarising it in a language it was not written in.
+    """
+    if not text or not text.strip():
+        return BoxCheck("", False, "empty", "Paste an article to summarise.", 0)
+
+    cleaned = clean(text)
+    words = len(cleaned.split())
+    if words < MIN_WORDS:
+        return BoxCheck(
+            "", False, "too_short",
+            f"Too short to summarise: {words} words. The minimum is {MIN_WORDS}.",
+            words,
+        )
+    if words > MAX_WORDS:
+        return BoxCheck(
+            "", False, "too_long",
+            f"Too long: {words:,} words. The maximum is {MAX_WORDS:,}.",
+            words,
+        )
+
+    locale = detect_language(cleaned)
+    if locale is None:
+        return BoxCheck(
+            "", False, "no_language",
+            "The language of this text is not clear. Paste an article written in "
+            "English, French or Arabic.",
+            words,
+        )
+    return BoxCheck(locale, True, None, "", words)
+
+
 class PastedClient:
     """Serves pasted text in place of MakinatyNews, so handle() runs unchanged."""
 
-    def __init__(self, texts: Mapping[str, str]) -> None:
+    def __init__(
+        self, texts: Mapping[str, str], titles: Mapping[str, str] | None = None
+    ) -> None:
         self.texts = dict(texts)
+        self.titles = dict(titles or {})
 
     async def fetch_article(self, article_id: int, locale: str) -> Article:
-        return Article(article_id=article_id, locale=locale, body_html=self.texts[locale])
+        return Article(
+            article_id=article_id,
+            locale=locale,
+            body_html=self.texts[locale],
+            title=self.titles.get(locale) or None,
+        )
 
 
 # Running.
@@ -260,6 +309,40 @@ def status_for(outcome: RunOutcome) -> tuple[str, list[str]]:
     return "Delivered", []
 
 
+# The data plate's "kept exactly" list.
+#
+# Read whole tokens, never fragments: French groups thousands with a space, so
+# 70 000 is one figure, and model codes carry hyphens and letters, so CQD20-G2,
+# 2C140 and 4×2 are each one term. A token is listed only if it carries a digit
+# and the article states it too. Tokens are compared folded (digit set, spaces,
+# thousands commas) but shown exactly as the quick read writes them.
+
+_TOKEN = re.compile(
+    r"\d{1,3}(?:[   ]\d{3})+(?:[.,]\d+)?"
+    r"|[A-Za-z0-9٠-٩۰-۹]+(?:[-/×.,][A-Za-z0-9٠-٩۰-۹]+)*"
+)
+_ARABIC_INDIC = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+MAX_KEPT = 6
+
+
+def _key(token: str) -> str:
+    folded = re.sub(r"[\s  ]", "", token.translate(_ARABIC_INDIC)).rstrip(".,")
+    if re.fullmatch(r"[\d.,]+", folded):
+        folded = folded.replace(",", "")
+    return folded
+
+
+def _terms(text: str) -> list[str]:
+    return [t.rstrip(".,") for t in _TOKEN.findall(text) if re.search(r"\d", _key(t))]
+
+
+def kept_exactly(summary: str, source: str) -> list[str]:
+    """Figures and model codes from the article that the quick read repeats."""
+    in_source = {_key(term) for term in _terms(source)}
+    kept = [term for term in _terms(summary) if len(_key(term)) > 1 and _key(term) in in_source]
+    return list(dict.fromkeys(kept))[:MAX_KEPT]
+
+
 def format_cost(result: QuickRead | None) -> str:
     if result is None or not result.cost_known:
         return "unknown"
@@ -313,15 +396,6 @@ def _setting(name: str, environ: Mapping, secrets: Mapping) -> str | None:
         return None
     value = str(value).strip()
     return value or None
-
-
-def demo_password(environ: Mapping, secrets: Mapping) -> str | None:
-    """None means the demo is not configured, and the page must refuse."""
-    return _setting("DEMO_PASSWORD", environ, secrets)
-
-
-def password_matches(given: str, expected: str) -> bool:
-    return hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
 
 
 def daily_limit(environ: Mapping, secrets: Mapping) -> int:

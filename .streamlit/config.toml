@@ -1,0 +1,16 @@
+# Committed on purpose: this is the page's look, not a secret.
+# Secrets live in .streamlit/secrets.toml, which git ignores.
+
+[theme]
+base = "light"
+primaryColor = "#1F45A8"
+backgroundColor = "#E6E8E3"
+secondaryBackgroundColor = "#F7F8F5"
+textColor = "#18222E"
+
+[client]
+toolbarMode = "minimal"
+showSidebarNavigation = false
+
+[browser]
+gatherUsageStats = false

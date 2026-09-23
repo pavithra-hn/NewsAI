@@ -27,7 +27,161 @@ from demo import logic
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-st.set_page_config(page_title="NewsAI quick read demo", layout="wide")
+st.set_page_config(page_title="Quick read", layout="wide")
+
+NATIVE_NAMES = {"en": "English", "fr": "Français", "ar": "العربية"}
+SAMPLE_LANGUAGES = {"English": "en", "Français": "fr", "العربية": "ar"}
+
+STYLE = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Noto+Naskh+Arabic:wght@400;600;700&display=swap');
+
+:root {
+  --concrete: #E6E8E3;
+  --slab: #F7F8F5;
+  --ink: #18222E;
+  --graphite: #56606B;
+  --rule: #C5CAC2;
+  --cobalt: #1F45A8;
+  --plate: #F0B429;
+  --rivet: #B7851A;
+  --blocked: #A8231B;
+  --display: 'IBM Plex Sans Condensed', 'Arial Narrow', sans-serif;
+  --ui: 'IBM Plex Sans', system-ui, sans-serif;
+  --read: 'Source Serif 4', Georgia, serif;
+  --arabic: 'Noto Naskh Arabic', 'Traditional Arabic', serif;
+}
+
+.stApp { background: var(--concrete); color: var(--ink); font-family: var(--ui); }
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stToolbar"], [data-testid="stDecoration"], #MainMenu, footer { display: none; }
+[data-testid="stHeaderActionElements"] { display: none; }
+.block-container { max-width: 1240px; padding-top: 2.75rem; padding-bottom: 4rem; }
+
+/* Masthead: the same two words in the three languages the tool works in. */
+.stApp .mast-title {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem;
+  margin: 0; padding: 0 0 1.1rem; border-bottom: 3px solid var(--ink);
+  font-family: var(--display); font-weight: 700; color: var(--ink);
+  font-size: clamp(1.9rem, 3.3vw, 3rem); line-height: 1.05; letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.stApp .mast-title [lang="ar"] {
+  font-family: var(--arabic); text-align: right; line-height: 1.25; font-size: 0.92em;
+}
+.stApp .mast-lede {
+  max-width: 62ch; margin: 1rem 0 0.5rem; color: var(--graphite);
+  font-size: 1.05rem; line-height: 1.6;
+}
+
+/* Tabs */
+.stApp [role="tablist"] { gap: 2.25rem; }
+.stApp [data-testid="stTab"] { min-height: 44px; }
+.stApp [data-testid="stTab"] p { font-family: var(--display); font-weight: 600; font-size: 1.15rem; }
+
+/* Column headings: which side is the article and which is the quick read. */
+.stApp .panel-head {
+  margin: 0.4rem 0 1rem; padding-bottom: 0.45rem; border-bottom: 2px solid var(--ink);
+  font-family: var(--display); font-weight: 700; font-size: 1.35rem; color: var(--ink);
+}
+
+/* Inputs. plaintext bidi lets pasted Arabic run right to left by itself. */
+.stApp .stTextInput label p, .stApp .stTextArea label p,
+.stApp .stSelectbox label p, .stApp .stRadio > label p {
+  font-family: var(--display); font-weight: 600; font-size: 1.05rem; color: var(--ink);
+}
+.stTextArea textarea, .stTextInput input {
+  font-family: var(--read); font-size: 1.02rem; color: var(--ink);
+  unicode-bidi: plaintext; text-align: start;
+}
+.stTextArea textarea { line-height: 1.65; }
+.stTextInput input { font-weight: 600; }
+
+/* The one action */
+.stButton button[kind="primary"] { min-height: 48px; padding: 0 2.5rem; border-radius: 4px; }
+.stApp .stButton button[kind="primary"] p {
+  font-family: var(--display); font-weight: 600; font-size: 1.15rem; letter-spacing: 0.01em;
+}
+.stButton button:focus-visible, .stTextArea textarea:focus-visible,
+.stTextInput input:focus-visible, .stApp [data-testid="stTab"]:focus-visible {
+  outline: 3px solid var(--plate); outline-offset: 2px;
+}
+
+/* The article, as a reader sees it */
+.stApp .article {
+  background: var(--slab); border-top: 3px solid var(--ink);
+  padding: 1.1rem 1.35rem 0.4rem; max-height: 440px; overflow-y: auto; margin-bottom: 1rem;
+}
+.stApp .article-title {
+  margin: 0 0 0.75rem; font-family: var(--read); font-weight: 600;
+  font-size: 1.3rem; line-height: 1.35; color: var(--ink);
+}
+.stApp .article p { margin: 0 0 0.85rem; font-family: var(--read); font-size: 1rem; line-height: 1.7; color: var(--ink); }
+.stApp .article[dir="rtl"] .article-title, .stApp .article[dir="rtl"] p { font-family: var(--arabic); }
+.stApp .article[dir="rtl"] p { font-size: 1.1rem; line-height: 1.9; }
+
+/* The quick read */
+.stApp .qr { background: var(--slab); border-top: 3px solid var(--cobalt); padding: 1.1rem 1.35rem 1.35rem; }
+.stApp .qr-lang { margin: 0 0 0.6rem; font-family: var(--display); font-weight: 600; font-size: 1rem; color: var(--cobalt); }
+.stApp .qr[dir="rtl"] .qr-lang { font-family: var(--arabic); }
+.stApp .qr-title { margin: 0 0 0.5rem; font-family: var(--read); font-weight: 600; font-size: 1.2rem; line-height: 1.35; color: var(--ink); }
+.stApp .qr-text { margin: 0; font-family: var(--read); font-size: 1.12rem; line-height: 1.75; color: var(--ink); }
+.stApp .qr[dir="rtl"] .qr-title, .stApp .qr[dir="rtl"] .qr-text { font-family: var(--arabic); }
+.stApp .qr[dir="rtl"] .qr-text { font-size: 1.22rem; line-height: 1.95; }
+/* Streamlit sets paragraphs left. Arabic reads from the right, so it aligns there. */
+.stApp [dir="rtl"] p { text-align: right; }
+.stApp [dir="rtl"] p[dir="ltr"] { text-align: left; }
+.stApp .qr.blocked { border-top-color: var(--blocked); }
+.stApp .qr-problem { margin: 0; color: var(--blocked); font-size: 1rem; line-height: 1.55; }
+.stApp .empty {
+  border: 2px dashed var(--rule); padding: 2.5rem 1.5rem; color: var(--graphite);
+  font-size: 1rem; line-height: 1.6;
+}
+
+/* The data plate: what the machine's own spec plate would say. */
+.stApp .plate {
+  margin-top: 1.1rem; padding: 0.85rem 1.35rem 0.95rem; border-radius: 3px; color: var(--ink);
+  background:
+    radial-gradient(circle at 9px 9px, var(--rivet) 2.4px, transparent 2.9px),
+    radial-gradient(circle at calc(100% - 9px) 9px, var(--rivet) 2.4px, transparent 2.9px),
+    radial-gradient(circle at 9px calc(100% - 9px), var(--rivet) 2.4px, transparent 2.9px),
+    radial-gradient(circle at calc(100% - 9px) calc(100% - 9px), var(--rivet) 2.4px, transparent 2.9px),
+    var(--plate);
+  font-family: var(--display); font-variant-numeric: tabular-nums;
+  animation: stamp 220ms ease-out both;
+}
+.stApp .plate-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1.8rem; }
+.stApp .plate-field { display: flex; flex-direction: column; }
+.stApp .plate-field b { font-size: 1.3rem; font-weight: 700; line-height: 1.15; }
+.stApp .plate-field span { font-size: 0.9rem; font-weight: 500; }
+.stApp .plate-kept {
+  margin-top: 0.65rem; padding-top: 0.55rem; font-size: 0.95rem;
+  border-top: 1px solid rgba(24, 34, 46, 0.35);
+}
+.stApp .plate-kept span { font-weight: 500; margin-right: 0.5rem; }
+.stApp .plate-kept b { display: inline-block; font-weight: 700; margin-right: 0.85rem; }
+@keyframes stamp { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .stApp .plate { animation: none; } }
+
+@media (max-width: 760px) {
+  .stApp .mast-title { grid-template-columns: 1fr; gap: 0.25rem; white-space: normal; }
+}
+</style>
+"""
+
+MASTHEAD = """
+<header>
+  <div class="mast-title" role="heading" aria-level="1">
+    <span lang="en">Quick read</span>
+    <span lang="fr">Lecture rapide</span>
+    <span lang="ar" dir="rtl">قراءة سريعة</span>
+  </div>
+  <p class="mast-lede">Paste a news article, or pick one of ours. You get a short summary
+  in the article's own language, with every figure kept exactly.</p>
+</header>
+"""
+
+st.markdown(STYLE, unsafe_allow_html=True)
 
 
 def not_configured(detail: str) -> None:
@@ -35,29 +189,12 @@ def not_configured(detail: str) -> None:
     st.stop()
 
 
-# 1. The gate. Nothing below it renders until the password is right, and a
-# missing password refuses rather than falling open.
-
 environ, secret_values = os.environ, bootstrap.read_streamlit_secrets()
-
-expected = logic.demo_password(environ, secret_values)
-if expected is None:
-    not_configured("Set DEMO_PASSWORD to open it.")
 
 try:
     daily_limit = logic.daily_limit(environ, secret_values)
 except ValueError:
     not_configured("DEMO_DAILY_LIMIT must be a positive whole number.")
-
-if not st.session_state.get("signed_in"):
-    st.title("NewsAI quick read demo")
-    given = st.text_input("Password", type="password", key="password")
-    if given:
-        if logic.password_matches(given, expected):
-            st.session_state.signed_in = True
-            st.rerun()
-        st.error("Incorrect password.")
-    st.stop()
 
 if not logic.provider_ready():
     not_configured("The AI provider key is missing.")
@@ -76,182 +213,160 @@ def samples():
 
 counter = usage_counter(daily_limit)
 
-# 2. The page.
-
-st.markdown(
-    """
-    <style>
-    .st-key-paste_ar textarea { direction: rtl; text-align: right; }
-    .rtl { direction: rtl; text-align: right; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-st.title("NewsAI quick read demo")
-st.info("Demo. Not yet connected to MakinatyNews.")
+st.markdown(MASTHEAD, unsafe_allow_html=True)
 
 
-def pipeline_version() -> str:
-    try:
-        return (ROOT / "PIPELINE_VERSION").read_text(encoding="utf-8").split()[0][:7]
-    except (OSError, IndexError):
-        return "unknown"
+def rtl(locale: str) -> str:
+    return ' dir="rtl"' if locale == "ar" else ""
 
 
-st.caption(f"Pipeline version {pipeline_version()}")
+def heading(text: str) -> None:
+    st.markdown(
+        f'<div class="panel-head" role="heading" aria-level="2">{text}</div>',
+        unsafe_allow_html=True,
+    )
 
 
-def quick_read_html(text: str, locale: str) -> str:
-    # Model output is escaped before it reaches the page.
-    direction = ' dir="rtl" class="rtl"' if locale == "ar" else ""
-    return f"<div{direction}>{html.escape(text)}</div>"
+def article_html(locale: str, title: str, body_html: str) -> str:
+    parts = [f'<div class="article" lang="{locale}"{rtl(locale)}>']
+    if title:
+        parts.append(f'<p class="article-title">{html.escape(title)}</p>')
+    parts.extend(f"<p>{html.escape(p)}</p>" for p in logic.paragraphs(body_html))
+    parts.append("</div>")
+    return "".join(parts)
 
 
-def render_outcome(outcome: logic.RunOutcome) -> None:
-    st.subheader(logic.LANGUAGE_NAMES[outcome.locale])
-    label, reasons = logic.status_for(outcome)
+def plate_html(outcome: logic.RunOutcome) -> str:
+    result = outcome.result
+    fields = [
+        (str(len(result.text.split())), "words"),
+        (f"{outcome.seconds:.1f}", "seconds"),
+        (logic.format_cost(result), "cost"),
+    ]
+    row = "".join(
+        f'<div class="plate-field"><b>{html.escape(value)}</b><span>{label}</span></div>'
+        for value, label in fields
+    )
+    kept = logic.kept_exactly(result.text, outcome.cleaned_source)
+    kept_html = ""
+    if kept:
+        kept_html = (
+            '<div class="plate-kept"><span>Kept exactly</span>'
+            + "".join(f"<b>{html.escape(term)}</b>" for term in kept)
+            + "</div>"
+        )
+    return f'<div class="plate" dir="ltr"><div class="plate-row">{row}</div>{kept_html}</div>'
+
+
+def quick_read_html(outcome: logic.RunOutcome, title: str) -> str:
+    locale = outcome.locale
+    _, reasons = logic.status_for(outcome)
+    head = f'<p class="qr-lang">{NATIVE_NAMES[locale]}</p>'
     result = outcome.result
 
-    if result is not None and result.deliverable:
-        st.markdown(quick_read_html(result.text, outcome.locale), unsafe_allow_html=True)
-        st.caption(
-            f"{len(result.text.split())} words  |  {outcome.seconds:.2f} s  |  "
-            f"cost {logic.format_cost(result)}"
-        )
-    elif result is not None:
-        st.caption(f"{outcome.seconds:.2f} s  |  cost {logic.format_cost(result)}")
-
-    message = label if not reasons else f"{label}. " + " ".join(reasons)
-    if label == "Delivered":
-        st.success(message)
-    elif label.startswith("Delivered"):
-        st.warning(message)
-    else:
-        st.error(message)
-
-    if result is None:
-        return
-
-    with st.expander("Quality checks"):
-        if not result.checks.hard and not result.checks.soft:
-            st.markdown("All checks passed.")
-        for failure in result.checks.hard:
-            if failure.code != "provider_error":
-                st.markdown(f"Blocked by `{failure.code}`")
-        for warning in result.checks.soft:
-            st.markdown(f"Flagged by `{warning.code}`: {html.escape(warning.detail)}")
-        if not result.deliverable and result.text:
-            st.markdown("Rejected output:")
-            st.markdown(quick_read_html(result.text, outcome.locale), unsafe_allow_html=True)
-
-    with st.expander("Protected names and figures"):
-        terms = outcome.protected
-        rows = [
-            ("Names in Latin script", terms.latin_runs),
-            ("Model codes", terms.model_codes),
-            ("Figures", terms.figures),
-        ]
-        for title, values in rows:
-            st.markdown(f"**{title}:** " + (", ".join(html.escape(v) for v in values) or "none"))
-
-    with st.expander("Cleaned source text"):
-        st.markdown(
-            quick_read_html(outcome.cleaned_source, outcome.locale), unsafe_allow_html=True
+    if result is None or not result.deliverable:
+        problem = " ".join(reasons) or logic.UNEXPECTED
+        return (
+            f'<div class="qr blocked" lang="{locale}"{rtl(locale)}>{head}'
+            f'<p class="qr-problem" dir="ltr">{html.escape(problem)}</p></div>'
         )
 
+    title_html = f'<p class="qr-title">{html.escape(title)}</p>' if title else ""
+    # Model output is escaped before it reaches the page.
+    return (
+        f'<div class="qr" lang="{locale}"{rtl(locale)}>{head}{title_html}'
+        f'<p class="qr-text">{html.escape(result.text)}</p>{plate_html(outcome)}</div>'
+    )
 
-def run(article_id: int, locales: list[str], client) -> dict:
-    if not counter.try_consume(len(locales)):
+
+def run(article_id: int, locale: str, client) -> dict:
+    if not counter.try_consume(1):
         return {
             "notice": (
                 f"The demo has reached its daily limit of {counter.limit} runs. "
-                f"It resets tomorrow. Runs left today: {counter.remaining()}."
+                "It resets tomorrow."
             )
         }
     try:
-        outcomes = logic.run_sync(logic.run_quick_reads(article_id, locales, client))
+        with st.spinner("Writing the quick read"):
+            outcomes = logic.run_sync(logic.run_quick_reads(article_id, [locale], client))
     except Exception:
         logging.getLogger("newsai.demo").exception("run failed")
         return {"notice": logic.UNEXPECTED}
-    return {"outcomes": {o.locale: o for o in outcomes}}
+    return {"outcome": outcomes[0]}
 
 
-def render_results(results: dict | None, locales) -> None:
-    if not results:
-        return
-    if results.get("notice"):
-        st.warning(results["notice"])
-
-    shown = [
-        loc for loc in locales
-        if loc in results.get("refused", {}) or loc in results.get("outcomes", {})
-    ]
-    if not shown:
-        return
-    for column, locale in zip(st.columns(len(shown)), shown):
-        with column:
-            if locale in results.get("refused", {}):
-                st.subheader(logic.LANGUAGE_NAMES[locale])
-                st.warning(results["refused"][locale])
-            else:
-                render_outcome(results["outcomes"][locale])
+def show_quick_read(result: dict | None, title: str, empty: str) -> None:
+    heading("Quick read")
+    if not result:
+        st.markdown(f'<div class="empty">{empty}</div>', unsafe_allow_html=True)
+    elif result.get("notice"):
+        st.warning(result["notice"])
+    else:
+        st.markdown(quick_read_html(result["outcome"], title), unsafe_allow_html=True)
 
 
 paste_tab, sample_tab = st.tabs(["Paste article", "Sample articles"])
 
-# 3. Paste tab.
-
 with paste_tab:
-    st.markdown(
-        "Paste an article into one, two or all three boxes. Each box is summarised "
-        "in its own language, then press Quick read. Plain text or HTML both work."
-    )
-    texts = {}
-    for column, locale in zip(st.columns(3), logic.LOCALES):
-        with column:
-            texts[locale] = st.text_area(
-                logic.LANGUAGE_NAMES[locale], key=f"paste_{locale}", height=320
-            )
+    left, right = st.columns([1.1, 1], gap="large")
 
-    if st.button("Quick read", key="paste_go", type="primary"):
-        checks = [logic.check_box(texts[locale], locale) for locale in logic.LOCALES]
-        filled = [c for c in checks if c.reason != "empty"]
-        if not filled:
-            st.session_state.paste_results = {
-                "notice": "Paste an article into at least one box."
-            }
-        else:
-            refused = {c.locale: c.message for c in filled if not c.ok}
-            runnable = [c.locale for c in filled if c.ok]
-            results = {"refused": refused}
-            if runnable:
-                results.update(run(0, runnable, logic.PastedClient(texts)))
-            st.session_state.paste_results = results
+    with left:
+        heading("Your article")
+        title = st.text_input("Title", key="paste_title", placeholder="Optional")
+        body = st.text_area(
+            "Content",
+            key="paste_body",
+            height=380,
+            placeholder="Paste the article text here, in English, French or Arabic.",
+        )
+        if st.button("Quick read", key="paste_go", type="primary"):
+            check = logic.check_paste(body)
+            if not check.ok:
+                outcome = {"notice": check.message}
+            else:
+                client = logic.PastedClient({check.locale: body}, {check.locale: title})
+                outcome = run(0, check.locale, client)
+            st.session_state.paste_result = {"for": (title, body), **outcome}
 
-    render_results(st.session_state.get("paste_results"), logic.LOCALES)
-
-# 4. Sample tab.
+    with right:
+        saved = st.session_state.get("paste_result")
+        # A quick read belongs to the text it was made from. Edit the article
+        # and the old quick read is no longer shown against it.
+        current = saved if saved and saved.get("for") == (title, body) else None
+        show_quick_read(
+            current, title.strip(), "Paste an article and press Quick read. "
+            "The summary appears here, in the article's own language."
+        )
 
 with sample_tab:
     client, titles = samples()
-    index = st.selectbox(
-        "Article",
-        range(len(titles)),
-        format_func=lambda i: f"{i + 1}. {titles[i]}",
-        key="sample_article",
-    )
-    choice = st.radio(
-        "Language",
-        ["English", "Arabic", "French", "All three"],
-        horizontal=True,
-        key="sample_lang",
-    )
-    if st.button("Quick read", key="sample_go", type="primary"):
-        if choice == "All three":
-            locales = list(logic.LOCALES)
-        else:
-            locales = [k for k, v in logic.LANGUAGE_NAMES.items() if v == choice]
-        st.session_state.sample_results = run(index + 1, locales, client)
+    left, right = st.columns([1.1, 1], gap="large")
 
-    render_results(st.session_state.get("sample_results"), logic.LOCALES)
+    with left:
+        heading("The article")
+        index = st.selectbox(
+            "Article",
+            range(len(titles)),
+            format_func=lambda i: f"{i + 1}. {titles[i]}",
+            key="sample_article",
+        )
+        choice = st.radio(
+            "Language", list(SAMPLE_LANGUAGES), horizontal=True, key="sample_lang"
+        )
+        locale = SAMPLE_LANGUAGES[choice]
+        version = client.articles[index]["locales"][locale]
+        st.markdown(
+            article_html(locale, version["title"], version["body_html"]), unsafe_allow_html=True
+        )
+        if st.button("Quick read", key="sample_go", type="primary"):
+            st.session_state.sample_result = {
+                "for": (index, locale), **run(index + 1, locale, client)
+            }
+
+    with right:
+        saved = st.session_state.get("sample_result")
+        current = saved if saved and saved.get("for") == (index, locale) else None
+        show_quick_read(
+            current, version["title"], "Press Quick read to summarise this article."
+        )

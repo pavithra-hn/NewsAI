@@ -1,10 +1,10 @@
-"""A straight copy of .env.example must start the app, safely closed."""
+"""A straight copy of .env.example must start the app with no secrets in it."""
 
 from pathlib import Path
 
-from app.config import Settings
 from dotenv import dotenv_values
 
+from app.config import Settings
 from demo import logic
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,16 +16,15 @@ def test_the_example_file_parses_as_settings():
     assert set(settings.models) == {"en", "ar", "fr"}
 
 
-def test_the_example_file_leaves_the_demo_closed():
+def test_the_example_file_uses_the_default_daily_limit():
     values = dotenv_values(EXAMPLE)
-    assert logic.demo_password(values, {}) is None
     assert logic.daily_limit(values, {}) == logic.DEFAULT_DAILY_LIMIT
 
 
 def test_the_example_file_holds_no_secrets():
     values = dotenv_values(EXAMPLE)
-    assert values["DEMO_PASSWORD"] == ""
     assert values["PROVIDER_API_KEY"] == ""
+    assert "DEMO_PASSWORD" not in values
 
 
 def test_secrets_are_ignored_by_git():
