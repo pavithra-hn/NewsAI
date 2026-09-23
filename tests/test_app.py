@@ -10,7 +10,7 @@ from streamlit.testing.v1 import AppTest
 from demo import logic
 from tests.test_logic import ARABIC, ENGLISH, FRENCH
 
-APP = str(Path(__file__).resolve().parents[1] / "demo" / "app.py")
+APP = str(Path(__file__).resolve().parents[1] / "demo" / "streamlit_app.py")
 PASSWORD = "correct horse"
 
 REPLIES = {

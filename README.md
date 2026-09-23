@@ -52,7 +52,7 @@ both are set. Both `.env` and `secrets.toml` are ignored by git.
 From the repository root:
 
 ```bash
-streamlit run demo/app.py
+streamlit run demo/streamlit_app.py
 ```
 
 Each language box, or each language of a sample, counts as one run against the
@@ -95,9 +95,9 @@ include it.
 ## Layout
 
 ```
-demo/app.py       the page
-demo/logic.py     everything the page does: checks, running, limits, settings
-data/corpus.json  the sample articles
-scripts/          the secret scan
-tests/            logic tests and headless page tests
+demo/streamlit_app.py  the page
+demo/logic.py          everything the page does: checks, running, limits, settings
+data/corpus.json       the sample articles
+scripts/               the secret scan
+tests/                 logic tests and headless page tests
 ```

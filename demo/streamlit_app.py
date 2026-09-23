@@ -1,6 +1,6 @@
 """NewsAI quick read demo. The page only; everything it does lives in logic.py.
 
-    streamlit run demo/app.py
+    streamlit run demo/streamlit_app.py
 """
 
 import html
