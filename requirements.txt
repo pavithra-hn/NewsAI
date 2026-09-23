@@ -1,0 +1,14 @@
+# The demo page.
+streamlit>=1.40
+python-dotenv>=1.0
+
+# The pipeline comes from news-ai-helper and is not installed by this file yet.
+#
+# Locally, install it editable from its own checkout, so pipeline changes can
+# be tried here before the pin below is moved:
+#   pip install -e D:\P&E\news-ai-helper
+#
+# For hosting, uncomment the line below. It needs feat/quick-read-pipeline
+# pushed to GitHub, and because that repository is private, the host needs a
+# GitHub token. Never put the token in this file.
+# news-ai-helper @ git+https://github.com/Plant-Equipment/news-ai-helper@fd606cd
