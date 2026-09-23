@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 import streamlit as st
-from app.providers.base import Completion, ProviderError
 from streamlit.testing.v1 import AppTest
 
+from app.providers.base import Completion, ProviderError
 from demo import logic
 from tests.test_logic import ARABIC, ENGLISH, FRENCH
 
@@ -268,3 +268,15 @@ def test_model_output_is_escaped_not_rendered_as_html(stub):
     finally:
         REPLIES.clear()
         REPLIES.update(REPLIES_BEFORE)
+
+
+def test_both_buttons_say_quick_read_like_the_real_product(stub):
+    at = signed_in()
+    assert at.button(key="paste_go").label == "Quick read"
+    assert at.button(key="sample_go").label == "Quick read"
+
+
+def test_the_page_shows_which_pipeline_version_it_runs(stub):
+    commit = (Path(APP).parents[1] / "PIPELINE_VERSION").read_text().split()[0]
+    at = signed_in()
+    assert commit[:7] in page_text(at)

@@ -11,26 +11,23 @@ from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
-from streamlit.errors import StreamlitAPIException
 
 # Streamlit puts demo/ on the path, not the repository root.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 load_dotenv(".env")
+
+# Secrets from the Streamlit Secrets box must reach the environment before the
+# pipeline reads its settings, which it does on import.
+from demo import bootstrap
+
+bootstrap.export_secrets(bootstrap.read_streamlit_secrets(), os.environ)
 
 from demo import logic
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 st.set_page_config(page_title="NewsAI quick read demo", layout="wide")
-
-
-def secrets() -> dict:
-    # st.secrets raises when there is no secrets file, which is the normal
-    # local case, and when the file is malformed. Either way there are none.
-    try:
-        return dict(st.secrets)
-    except StreamlitAPIException:
-        return {}
 
 
 def not_configured(detail: str) -> None:
@@ -41,7 +38,7 @@ def not_configured(detail: str) -> None:
 # 1. The gate. Nothing below it renders until the password is right, and a
 # missing password refuses rather than falling open.
 
-environ, secret_values = os.environ, secrets()
+environ, secret_values = os.environ, bootstrap.read_streamlit_secrets()
 
 expected = logic.demo_password(environ, secret_values)
 if expected is None:
@@ -93,6 +90,16 @@ st.markdown(
 
 st.title("NewsAI quick read demo")
 st.info("Demo. Not yet connected to MakinatyNews.")
+
+
+def pipeline_version() -> str:
+    try:
+        return (ROOT / "PIPELINE_VERSION").read_text(encoding="utf-8").split()[0][:7]
+    except (OSError, IndexError):
+        return "unknown"
+
+
+st.caption(f"Pipeline version {pipeline_version()}")
 
 
 def quick_read_html(text: str, locale: str) -> str:
@@ -198,7 +205,7 @@ paste_tab, sample_tab = st.tabs(["Paste article", "Sample articles"])
 with paste_tab:
     st.markdown(
         "Paste an article into one, two or all three boxes. Each box is summarised "
-        "in its own language. Plain text or HTML both work."
+        "in its own language, then press Quick read. Plain text or HTML both work."
     )
     texts = {}
     for column, locale in zip(st.columns(3), logic.LOCALES):
@@ -207,7 +214,7 @@ with paste_tab:
                 logic.LANGUAGE_NAMES[locale], key=f"paste_{locale}", height=320
             )
 
-    if st.button("Generate quick reads", key="paste_go", type="primary"):
+    if st.button("Quick read", key="paste_go", type="primary"):
         checks = [logic.check_box(texts[locale], locale) for locale in logic.LOCALES]
         filled = [c for c in checks if c.reason != "empty"]
         if not filled:
@@ -240,7 +247,7 @@ with sample_tab:
         horizontal=True,
         key="sample_lang",
     )
-    if st.button("Generate quick read", key="sample_go", type="primary"):
+    if st.button("Quick read", key="sample_go", type="primary"):
         if choice == "All three":
             locales = list(logic.LOCALES)
         else:

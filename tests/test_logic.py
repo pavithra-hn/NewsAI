@@ -5,8 +5,8 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from app.providers.base import Completion, ProviderError
 
+from app.providers.base import Completion, ProviderError
 from demo import logic
 
 CORPUS = json.loads(
@@ -372,3 +372,34 @@ def test_the_samples_are_the_25_vendored_articles():
     titles = logic.sample_titles()
     assert len(titles) == 25
     assert titles[0].startswith("HD Construction Equipment")
+
+
+# The two checks added with the length tiers and hedges. The manager must see
+# a sentence, never a raw code.
+
+
+def _flagged(code, detail):
+    from app.actions.quick_read import QuickRead
+    from app.pipeline.quality import CheckReport, SoftWarning
+
+    result = QuickRead(
+        article_id=0, locale="en", text="A summary.",
+        checks=CheckReport(soft=(SoftWarning(code, detail),)),
+        deliverable=True, needs_review=True,
+    )
+    return logic.status_for(logic.RunOutcome("en", result, 1.0))
+
+
+def test_a_dropped_hedge_is_explained_in_plain_english():
+    label, reasons = _flagged("hedge_dropped", "70,000")
+    assert label == "Delivered, review suggested"
+    assert "70,000" in reasons[0]
+    assert "approximate" in reasons[0]
+    assert "hedge_dropped" not in reasons[0]
+
+
+def test_an_over_long_summary_is_explained_in_plain_english():
+    _label, reasons = _flagged("over_length", "73 words, short target up to 60")
+    assert "73 words" in reasons[0]
+    assert "Longer than intended" in reasons[0]
+    assert "over_length" not in reasons[0]

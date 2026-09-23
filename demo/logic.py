@@ -230,6 +230,11 @@ HARD_REASONS = {
 SOFT_REASONS = {
     "invented_figures": "A figure in the summary does not appear in the article: {detail}.",
     "unapproved_latin": "Latin-script text in the Arabic summary is not in the article: {detail}.",
+    "hedge_dropped": (
+        "An approximate figure is stated as exact: {detail}. "
+        "The article says about or around."
+    ),
+    "over_length": "Longer than intended for an article this size: {detail}.",
     "soft_check_error": "One of the review checks could not run.",
 }
 
