@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from app.config import settings
 from app.glossary.terms import lookup
 from app.pipeline.clean import clean
+from app.pipeline.phrasing import stock_phrases
 from app.pipeline.protect import protect
 from app.pipeline.quality import CheckReport, HardFailure, check_output, check_source
 from app.pipeline.summarise import DEFAULT_TEMPERATURE, summarise
@@ -49,6 +50,16 @@ def _corrective(report: CheckReport) -> str:
     )
 
 
+def _rewrite_request(summary: str, phrases: list[str]) -> str:
+    named = ", ".join(f'"{phrase}"' for phrase in phrases)
+    return (
+        f"Here is your summary:\n{summary}\n\n"
+        f"Rewrite it without {named}. Say what happened in plain verbs instead. "
+        "Keep every fact, name and figure exactly as it is, in the same language and "
+        "at about the same length. Write only the summary."
+    )
+
+
 async def handle(
     article_id: int,
     locale: str,
@@ -59,7 +70,12 @@ async def handle(
     max_attempts: int | None = None,
 ) -> QuickRead:
     model = model or settings.model_for(locale)
-    max_attempts = max_attempts or settings.max_generation_attempts
+    if max_attempts is None:
+        max_attempts = settings.max_generation_attempts
+    if max_attempts < 1:
+        # No attempt means no model call and no check, and so nothing that may
+        # be delivered. Refuse rather than return an empty quick read.
+        raise ValueError(f"max_attempts must be at least 1, got {max_attempts}")
 
     article = await client.fetch_article(article_id, locale)
     text = clean(article.body_html)
@@ -119,6 +135,36 @@ async def handle(
             break
 
         corrective = _corrective(report)
+
+    # One rewrite pass for stock filler. A model follows "remove 'showcasing'"
+    # far better than a general rule it has already ignored once. The rewrite
+    # is kept only if it is still correct and carries less filler.
+    filler = stock_phrases(completion.text, text, locale) if completion and not report.hard else []
+    if filler:
+        try:
+            revised = await summarise(
+                title=article.title,
+                text=text,
+                locale=locale,
+                protected=protected,
+                glossary=glossary,
+                provider=provider,
+                model=model,
+                temperature=DEFAULT_TEMPERATURE,
+                corrective=_rewrite_request(completion.text, filler),
+            )
+        except ProviderError:
+            # The original stands. The failed call may still have been billed.
+            cost_known = False
+        else:
+            cost += revised.cost_usd
+            cost_known = cost_known and revised.cost_known
+            revised_report = check_output(
+                text, revised.text, locale, protected, finish_reason=revised.finish_reason
+            )
+            cleaner = len(stock_phrases(revised.text, text, locale)) < len(filler)
+            if not revised_report.hard and cleaner:
+                completion, report = revised, revised_report
 
     return QuickRead(
         article_id=article_id,

@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SUPPORTED_LOCALES = frozenset({"en", "ar", "fr"})
@@ -45,8 +45,9 @@ class Settings(BaseSettings):
     # seconds on a congested free pool. Oxlo returns in single digits.
     provider_timeout_seconds: float = 180.0
 
-    max_transport_attempts: int = 3
-    max_generation_attempts: int = 2
+    # At least one each: zero attempts would run no model and no check.
+    max_transport_attempts: int = Field(default=3, ge=1)
+    max_generation_attempts: int = Field(default=2, ge=1)
 
     # Hosting already takes $12 of the $20 total, so the inference headroom is
     # about $8. Enforcing this needs storage, which arrives with the API layer.

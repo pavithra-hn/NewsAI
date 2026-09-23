@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 
 from app.pipeline.figures import dropped_hedges, invented_figures
 from app.pipeline.length import HARD_MAX_WORDS, TOLERANCE, target_for
+from app.pipeline.phrasing import stock_phrases
 from app.pipeline.protect import ProtectedTerms
 
 ARABIC = re.compile(r"[؀-ۿ]")
@@ -138,6 +139,11 @@ def _soft_checks(source, output, locale, protected) -> list[SoftWarning]:
         warnings.append(
             SoftWarning("over_length", f"{words} words, {target.tier} target up to {target.max_words}")
         )
+
+    # Promotional filler the article never used reads as machine copy.
+    filler = stock_phrases(output, source, locale)
+    if filler:
+        warnings.append(SoftWarning("stock_phrase", ", ".join(filler[:3])))
 
     # Latin script inside Arabic is correct for brand and product names, so
     # the check is that it matches something the source actually protected.

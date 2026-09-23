@@ -25,6 +25,17 @@ STYLE_END = "<<<END STYLE EXAMPLE>>>"
 
 LANGUAGE = {"en": "English", "ar": "Arabic", "fr": "French"}
 
+# Named in each language's own words, since a French or Arabic quick read slips
+# into French and Arabic filler, not English. Measured on the quality study:
+# "vise à" alone appeared in five of ten French quick reads.
+STOCK_EXAMPLES = {
+    "en": '"showcase", "featuring", "highlighting", "aims to", "as it continues to", '
+    '"strengthen its position", "poised to", "a testament to"',
+    "fr": "« vise à », « visant à », « met en avant », « souligne », « s'inscrit dans », "
+    "« renforcer sa position », « de pointe »",
+    "ar": "«في خطوة»، «يسلط الضوء»، «مما يعكس»، «في إطار سعيها»، «نقلة نوعية»، «بهدف تعزيز»",
+}
+
 # One human-written example per language: the published opening of an article
 # kept out of every evaluation set. A file per language, so a native-written
 # example can replace one without a code change.
@@ -51,8 +62,19 @@ tonnage, a model code or a price.
 as examples, not as a complete list.
 - Use the article's own terms rather than generic ones.
 
-Style: write as a native trade journalist writing in {language}, with correct \
-grammar and agreement. Avoid literal, word-for-word phrasing.
+How to write it:
+- Write the way a trade reporter files a brief, not the way a press release \
+reads. Use plain verbs that say what happened: signed, delivered, ordered, will \
+build, opened, bought.
+- Do not use stock phrases such as {stock_examples}, unless the article itself \
+uses them.
+- Open with one short sentence, under 15 words, that says what happened. Then vary \
+the length of the sentences that follow.
+- Use no more than three numbers (amounts, quantities, dates). Keep the ones that \
+carry the news and leave the rest to the article. Never drop the number the story \
+is about.
+- Write as a native trade journalist writing in {language}, with correct grammar \
+and agreement. Avoid literal, word-for-word phrasing.
 
 Write only the summary. No preamble, no heading, no explanation of what you \
 did."""
@@ -109,7 +131,11 @@ def _terms_block(protected: ProtectedTerms, glossary: dict[str, str], text: str)
     figures = tuple(_figure_term(f, phrases) for f in protected.figures)
     terms = tuple(dict.fromkeys(protected.latin_runs + protected.model_codes + figures))
     if terms:
-        lines.append('Preserve these exactly as written, including any qualifier such as "about":')
+        # Not a list to include: listing every figure as "preserve these" packed
+        # quick reads with numbers against the three-number rule.
+        lines.append(
+            'If used, copy exactly, with any "about". Do not add a term just because it is listed:'
+        )
         lines.extend(f"  {term}" for term in terms)
 
     if glossary:
@@ -131,6 +157,7 @@ def build_prompt(
     target = target_for(len(text.split()), locale)
     fields = {
         "language": language,
+        "stock_examples": STOCK_EXAMPLES[locale],
         "min_sentences": target.min_sentences,
         "max_sentences": target.max_sentences,
         "min_words": target.min_words,

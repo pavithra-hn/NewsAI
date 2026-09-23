@@ -1,8 +1,8 @@
 """Maps an action name to the code that handles it.
 
-This is the seam the next AI capability plugs into. Adding one means writing a
-handler and registering it here: authentication, queueing, retries, logging and
-cost tracking are already in place around it.
+This is the seam the next AI capability plugs into: write a handler and register
+it here. The HTTP API, authentication and job queue that will dispatch to these
+handlers arrive with the API work; today only the CLI calls them.
 """
 
 from collections.abc import Awaitable, Callable
