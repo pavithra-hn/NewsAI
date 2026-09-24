@@ -324,7 +324,7 @@ def test_the_model_menu_offers_every_available_model_with_glm_5_last(stub):
 
     no_crash(at)
     assert at.selectbox(key="model").options == [
-        "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)", "GLM-5",
+        "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5",
     ]
     assert at.selectbox(key="model").value == "Gemma 4 31B"
 
@@ -359,7 +359,7 @@ def test_a_slow_model_warns_that_it_can_take_minutes(stub):
     at = start()
     assert "several minutes" not in page_text(at)
 
-    at.selectbox(key="model").select("GLM-5.3 (slow)").run()
+    at.selectbox(key="model").select("GLM-5.2 (slow)").run()
 
     assert "several minutes" in page_text(at)
 
@@ -374,6 +374,6 @@ def test_choosing_a_slow_model_keeps_the_reader_on_their_tab(stub):
     at = start()
     before = tabs_position(at)
 
-    at.selectbox(key="model").select("GLM-5.3 (slow)").run()
+    at.selectbox(key="model").select("GLM-5.2 (slow)").run()
 
     assert tabs_position(at) == before

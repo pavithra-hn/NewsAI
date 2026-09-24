@@ -289,7 +289,7 @@ def test_deepinfra_models_go_to_deepinfra_with_the_deepinfra_key():
 
 
 def test_a_thinking_model_is_given_its_token_budget():
-    provider = logic.make_provider(by_label("GLM-5.3 (slow)"), {"DEEPINFRA_API_KEY": "di-key"})
+    provider = logic.make_provider(by_label("GLM-5.2 (slow)"), {"DEEPINFRA_API_KEY": "di-key"})
     try:
         assert isinstance(provider, logic.TokenBudget)
         assert provider.max_tokens >= 6000
@@ -311,7 +311,7 @@ def test_deepinfra_models_are_offered_only_when_their_key_is_set():
     with_key = logic.available_models({"DEEPINFRA_API_KEY": "di-key"}, main_key="oxlo-key")
     assert [o.label for o in without] == ["GLM-5"]
     assert [o.label for o in with_key] == [
-        "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)", "GLM-5",
+        "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5",
     ]
 
 

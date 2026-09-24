@@ -231,7 +231,6 @@ MODEL_OPTIONS = (
     ModelOption("Gemma 4 31B", "google/gemma-4-31B-it", on_deepinfra=True),
     ModelOption("GLM-5.3 Flash", "zai-org/GLM-5.3-Flash", on_deepinfra=True),
     ModelOption("GLM-5.2 (slow)", "zai-org/GLM-5.2", on_deepinfra=True, max_tokens=THINKING_BUDGET),
-    ModelOption("GLM-5.3 (slow)", "zai-org/GLM-5.3", on_deepinfra=True, max_tokens=THINKING_BUDGET),
     ModelOption("GLM-5", "glm-5", on_deepinfra=False),
 )
 

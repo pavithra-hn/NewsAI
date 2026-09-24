@@ -55,7 +55,7 @@ copy .env.example .env                       # macOS or Linux: cp
 | `PROVIDER_BASE_URL` | Model provider endpoint |
 | `PROVIDER_API_KEY` | Model provider key. Secret |
 | `MODELS` | Model per language, as one JSON object with `en`, `ar` and `fr` |
-| `DEEPINFRA_API_KEY` | DeepInfra key. Secret. Adds Gemma 4 31B, GLM-5.3 Flash, GLM-5.2 and GLM-5.3 to the Model menu; without it only GLM-5 is offered |
+| `DEEPINFRA_API_KEY` | DeepInfra key. Secret. Adds Gemma 4 31B, GLM-5.3 Flash and GLM-5.2 to the Model menu; without it only GLM-5 is offered |
 
 Values can also come from `.streamlit/secrets.toml`, which is how Streamlit
 Community Cloud supplies them. They are copied into the environment before the
