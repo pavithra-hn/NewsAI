@@ -26,13 +26,15 @@ class Stub:
         self.fail = fail
         self.calls = 0
         self.prompts = []
+        self.models = []
 
-    def __call__(self):
+    def __call__(self, *args, **kwargs):
         return self
 
     async def complete(self, messages, *, model, temperature=0.3, max_tokens=400):
         self.calls += 1
         self.prompts.append("\n".join(m["content"] for m in messages))
+        self.models.append(model)
         if self.fail is not None:
             raise self.fail
         language = next(name for name in REPLIES if f"Write in {name}" in messages[0]["content"])
@@ -55,6 +57,7 @@ def stub(monkeypatch, tmp_path):
     provider = Stub()
     monkeypatch.setattr(logic, "make_provider", provider)
     monkeypatch.setattr(logic, "provider_ready", lambda: True)
+    monkeypatch.setattr(logic, "available_models", lambda *a, **k: list(logic.MODEL_OPTIONS))
     return provider
 
 
@@ -311,3 +314,66 @@ def test_model_output_is_escaped_not_rendered_as_html(stub):
 def test_a_pasted_title_is_escaped_too(stub):
     at = paste(start(), body=ENGLISH, title="<b>Bold</b> headline")
     assert not any("<b>Bold</b>" in m.value for m in at.markdown)
+
+
+# Choosing a model.
+
+
+def test_the_model_menu_offers_every_available_model(stub):
+    at = start()
+
+    no_crash(at)
+    assert at.selectbox(key="model").options == [
+        "GLM-5", "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)",
+    ]
+    assert at.selectbox(key="model").value == "GLM-5"
+
+
+def test_the_chosen_model_writes_the_quick_read(stub):
+    at = start()
+    at.selectbox(key="model").select("Gemma 4 31B").run()
+    paste(at, ENGLISH)
+
+    no_crash(at)
+    assert stub.models and set(stub.models) == {"google/gemma-4-31B-it"}
+
+
+def test_each_quick_read_names_the_model_that_wrote_it(stub):
+    at = start()
+    at.selectbox(key="model").select("GLM-5.3 Flash").run()
+    paste(at, ENGLISH)
+
+    assert "GLM-5.3 Flash" in page_text(at)
+
+
+def test_changing_the_model_hides_the_old_quick_read(stub):
+    at = paste(start(), ENGLISH)
+    assert REPLIES["English"] in page_text(at)
+
+    at.selectbox(key="model").select("Gemma 4 31B").run()
+
+    assert REPLIES["English"] not in page_text(at)
+
+
+def test_a_slow_model_warns_that_it_can_take_minutes(stub):
+    at = start()
+    assert "several minutes" not in page_text(at)
+
+    at.selectbox(key="model").select("GLM-5.3 (slow)").run()
+
+    assert "several minutes" in page_text(at)
+
+
+def tabs_position(at):
+    return next(i for i, node in at.main.children.items() if node.type == "tab_container")
+
+
+def test_choosing_a_slow_model_keeps_the_reader_on_their_tab(stub):
+    """Streamlit resets tabs that move on the page, which sent a reader on the
+    Sample tab back to Paste when the slow-model note appeared above them."""
+    at = start()
+    before = tabs_position(at)
+
+    at.selectbox(key="model").select("GLM-5.3 (slow)").run()
+
+    assert tabs_position(at) == before

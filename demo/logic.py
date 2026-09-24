@@ -6,6 +6,7 @@ not copied: it is imported from news-ai-helper exactly as its own CLI uses it.
 
 import asyncio
 import logging
+import os
 import re
 import threading
 import time
@@ -202,21 +203,85 @@ class RunOutcome:
     protected: ProtectedTerms = field(default_factory=ProtectedTerms)
 
 
-def make_provider():
-    return LLMProvider()
+# Models a reader can choose from. GLM-5 runs on the main provider from the
+# settings; the others run on DeepInfra with their own key.
+
+DEEPINFRA_URL = "https://api.deepinfra.com/v1/openai"
+DEEPINFRA_KEY = "DEEPINFRA_API_KEY"
+
+# The pipeline asks for 400 tokens, which a thinking model spends before it has
+# written a word. Measured on the SDLG article: up to about 6,000.
+THINKING_BUDGET = 8000
+
+
+@dataclass(frozen=True)
+class ModelOption:
+    label: str
+    model: str
+    on_deepinfra: bool
+    max_tokens: int | None = None
+
+    @property
+    def slow(self) -> bool:
+        return self.max_tokens is not None
+
+
+MODEL_OPTIONS = (
+    ModelOption("GLM-5", "glm-5", on_deepinfra=False),
+    ModelOption("Gemma 4 31B", "google/gemma-4-31B-it", on_deepinfra=True),
+    ModelOption("GLM-5.3 Flash", "zai-org/GLM-5.3-Flash", on_deepinfra=True),
+    ModelOption("GLM-5.2 (slow)", "zai-org/GLM-5.2", on_deepinfra=True, max_tokens=THINKING_BUDGET),
+    ModelOption("GLM-5.3 (slow)", "zai-org/GLM-5.3", on_deepinfra=True, max_tokens=THINKING_BUDGET),
+)
+
+
+def available_models(environ: Mapping, main_key: str | None = None) -> list[ModelOption]:
+    """The options whose provider has a key, in menu order."""
+    main_key = settings.provider_api_key if main_key is None else main_key
+    deepinfra_key = (environ.get(DEEPINFRA_KEY) or "").strip()
+    return [
+        option for option in MODEL_OPTIONS
+        if (deepinfra_key if option.on_deepinfra else main_key)
+    ]
+
+
+class TokenBudget:
+    """Passes every call through with a larger token allowance."""
+
+    def __init__(self, provider, max_tokens: int) -> None:
+        self._provider = provider
+        self.max_tokens = max_tokens
+
+    async def complete(self, messages, *, model, temperature=0.3, max_tokens=400):
+        return await self._provider.complete(
+            messages, model=model, temperature=temperature, max_tokens=self.max_tokens
+        )
+
+    async def aclose(self) -> None:
+        await self._provider.aclose()
+
+
+def make_provider(option: ModelOption | None = None, environ: Mapping | None = None):
+    if option is None or not option.on_deepinfra:
+        return LLMProvider()
+    environ = os.environ if environ is None else environ
+    provider = LLMProvider(base_url=DEEPINFRA_URL, api_key=environ.get(DEEPINFRA_KEY, ""))
+    if option.max_tokens:
+        return TokenBudget(provider, option.max_tokens)
+    return provider
 
 
 def provider_ready() -> bool:
-    return bool(settings.provider_api_key)
+    return bool(available_models(os.environ))
 
 
-async def _run_one(article_id, locale, client, provider) -> RunOutcome:
+async def _run_one(article_id, locale, client, provider, model=None) -> RunOutcome:
     started = time.monotonic()
     try:
         article = await client.fetch_article(article_id, locale)
         cleaned = clean(article.body_html)
         result = await get_action("quick_read")(
-            article_id, locale, client=client, provider=provider
+            article_id, locale, client=client, provider=provider, model=model
         )
     except Exception:
         log.exception("quick read failed for %s, article %s", locale, article_id)
@@ -240,17 +305,19 @@ async def run_quick_reads(
     locales,
     client,
     provider_factory: Callable | None = None,
+    model: str | None = None,
 ) -> list[RunOutcome]:
     """Run the given locales concurrently on one provider, then close it.
 
     The provider is created inside the running event loop and closed before
-    it ends, so its HTTP client never outlives the loop that owns it.
+    it ends, so its HTTP client never outlives the loop that owns it. With no
+    model given, the pipeline uses the one configured for each language.
     """
     provider = (provider_factory or make_provider)()
     try:
         return list(
             await asyncio.gather(
-                *(_run_one(article_id, locale, client, provider) for locale in locales)
+                *(_run_one(article_id, locale, client, provider, model) for locale in locales)
             )
         )
     finally:

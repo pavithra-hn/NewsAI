@@ -192,6 +192,13 @@ counter = usage_counter(daily_limit)
 
 st.markdown(MASTHEAD, unsafe_allow_html=True)
 
+models = {option.label: option for option in logic.available_models(os.environ)}
+model = models[st.selectbox("Model", list(models), key="model")]
+# Always drawn, so the tabs below never move: Streamlit resets tabs that move.
+note = st.empty()
+if model.slow:
+    note.caption("This model thinks before it writes. A quick read can take several minutes.")
+
 
 def rtl(locale: str) -> str:
     return ' dir="rtl"' if locale == "ar" else ""
@@ -213,12 +220,15 @@ def article_html(locale: str, title: str, body_html: str) -> str:
     return "".join(parts)
 
 
-def meta_html(outcome: logic.RunOutcome) -> str:
+def meta_html(outcome: logic.RunOutcome, model_label: str) -> str:
     words = len(outcome.result.text.split())
-    return f'<p class="qr-meta" dir="ltr">{words} words, {outcome.seconds:.1f} seconds</p>'
+    return (
+        f'<p class="qr-meta" dir="ltr">{words} words, {outcome.seconds:.1f} seconds, '
+        f"{html.escape(model_label)}</p>"
+    )
 
 
-def quick_read_html(outcome: logic.RunOutcome, title: str) -> str:
+def quick_read_html(outcome: logic.RunOutcome, title: str, model_label: str) -> str:
     locale = outcome.locale
     _, reasons = logic.status_for(outcome)
     head = f'<p class="qr-lang">{NATIVE_NAMES[locale]}</p>'
@@ -235,7 +245,8 @@ def quick_read_html(outcome: logic.RunOutcome, title: str) -> str:
     # Model output is escaped before it reaches the page.
     return (
         f'<div class="qr" lang="{locale}"{rtl(locale)}>{head}{title_html}'
-        f'<p class="qr-text">{html.escape(result.text)}</p>{meta_html(outcome)}</div>'
+        f'<p class="qr-text">{html.escape(result.text)}</p>'
+        f"{meta_html(outcome, model_label)}</div>"
     )
 
 
@@ -247,13 +258,19 @@ def run(article_id: int, locale: str, client) -> dict:
                 "It resets tomorrow."
             )
         }
+    waiting = "Writing the quick read"
+    if model.slow:
+        waiting += ". This model can take several minutes"
     try:
-        with st.spinner("Writing the quick read"):
-            outcomes = logic.run_sync(logic.run_quick_reads(article_id, [locale], client))
+        with st.spinner(waiting):
+            outcomes = logic.run_sync(logic.run_quick_reads(
+                article_id, [locale], client,
+                provider_factory=lambda: logic.make_provider(model), model=model.model,
+            ))
     except Exception:
         logging.getLogger("newsai.demo").exception("run failed")
         return {"notice": logic.UNEXPECTED}
-    return {"outcome": outcomes[0]}
+    return {"outcome": outcomes[0], "model": model.label}
 
 
 def show_quick_read(result: dict | None, title: str, empty: str) -> None:
@@ -263,7 +280,9 @@ def show_quick_read(result: dict | None, title: str, empty: str) -> None:
     elif result.get("notice"):
         st.warning(result["notice"])
     else:
-        st.markdown(quick_read_html(result["outcome"], title), unsafe_allow_html=True)
+        st.markdown(
+            quick_read_html(result["outcome"], title, result["model"]), unsafe_allow_html=True
+        )
 
 
 paste_tab, sample_tab = st.tabs(["Paste article", "Sample articles"])
@@ -287,13 +306,13 @@ with paste_tab:
             else:
                 client = logic.PastedClient({check.locale: body}, {check.locale: title})
                 outcome = run(0, check.locale, client)
-            st.session_state.paste_result = {"for": (title, body), **outcome}
+            st.session_state.paste_result = {"for": (title, body, model.label), **outcome}
 
     with right:
         saved = st.session_state.get("paste_result")
-        # A quick read belongs to the text it was made from. Edit the article
-        # and the old quick read is no longer shown against it.
-        current = saved if saved and saved.get("for") == (title, body) else None
+        # A quick read belongs to the text and the model it was made with. Edit
+        # the article or pick another model and the old one is no longer shown.
+        current = saved if saved and saved.get("for") == (title, body, model.label) else None
         show_quick_read(
             current, title.strip(), "Paste an article and press Quick read. "
             "The summary appears here, in the article's own language."
@@ -321,12 +340,12 @@ with sample_tab:
         )
         if st.button("Quick read", key="sample_go", type="primary"):
             st.session_state.sample_result = {
-                "for": (index, locale), **run(index + 1, locale, client)
+                "for": (index, locale, model.label), **run(index + 1, locale, client)
             }
 
     with right:
         saved = st.session_state.get("sample_result")
-        current = saved if saved and saved.get("for") == (index, locale) else None
+        current = saved if saved and saved.get("for") == (index, locale, model.label) else None
         show_quick_read(
             current, version["title"], "Press Quick read to summarise this article."
         )

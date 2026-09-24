@@ -151,9 +151,13 @@ class StubProvider:
         self.barrier = barrier
         self.calls = 0
         self.closed = False
+        self.models = []
+        self.max_tokens = []
 
     async def complete(self, messages, *, model, temperature=0.3, max_tokens=400):
         self.calls += 1
+        self.models.append(model)
+        self.max_tokens.append(max_tokens)
         if self.barrier is not None:
             await asyncio.wait_for(self.barrier.wait(), timeout=2)
         if self.fail:
@@ -243,6 +247,78 @@ def test_an_outcome_carries_the_cleaned_source_and_protected_terms():
     assert outcome.cleaned_source.startswith("Volvo Construction Equipment")
     assert "EC220" in outcome.protected.model_codes
     assert outcome.seconds >= 0
+
+
+# Choosing a model.
+
+
+def by_label(label):
+    return next(option for option in logic.MODEL_OPTIONS if option.label == label)
+
+
+def test_the_chosen_model_is_the_one_asked_to_write():
+    provider = StubProvider(SUMMARIES["en"])
+    client = logic.PastedClient({"en": ENGLISH})
+    outcome = asyncio.run(
+        logic.run_quick_reads(0, ["en"], client, lambda: provider, model="google/gemma-4-31B-it")
+    )[0]
+    assert provider.models == ["google/gemma-4-31B-it"]
+    assert outcome.result.model == "google/gemma-4-31B-it"
+
+
+def test_a_thinking_model_gets_room_to_think_before_it_writes():
+    inner = StubProvider(SUMMARIES["en"])
+    budgeted = logic.TokenBudget(inner, 8000)
+    run(["en"], budgeted)
+    assert inner.max_tokens == [8000]
+
+
+def test_a_budgeted_provider_is_still_closed_after_the_run():
+    inner = StubProvider(SUMMARIES["en"])
+    run(["en"], logic.TokenBudget(inner, 8000))
+    assert inner.closed is True
+
+
+def test_deepinfra_models_go_to_deepinfra_with_the_deepinfra_key():
+    provider = logic.make_provider(by_label("Gemma 4 31B"), {"DEEPINFRA_API_KEY": "di-key"})
+    try:
+        assert str(provider._client.base_url).rstrip("/") == "https://api.deepinfra.com/v1/openai"
+        assert provider._client.headers["Authorization"] == "Bearer di-key"
+    finally:
+        asyncio.run(provider.aclose())
+
+
+def test_a_thinking_model_is_given_its_token_budget():
+    provider = logic.make_provider(by_label("GLM-5.3 (slow)"), {"DEEPINFRA_API_KEY": "di-key"})
+    try:
+        assert isinstance(provider, logic.TokenBudget)
+        assert provider.max_tokens >= 6000
+    finally:
+        asyncio.run(provider.aclose())
+
+
+def test_glm_5_uses_the_configured_provider_and_not_the_deepinfra_key():
+    provider = logic.make_provider(by_label("GLM-5"), {"DEEPINFRA_API_KEY": "di-key"})
+    try:
+        assert str(provider._client.base_url).rstrip("/") == "https://api.oxlo.ai/v1"
+        assert provider._client.headers["Authorization"] != "Bearer di-key"
+    finally:
+        asyncio.run(provider.aclose())
+
+
+def test_deepinfra_models_are_offered_only_when_their_key_is_set():
+    without = logic.available_models({}, main_key="oxlo-key")
+    with_key = logic.available_models({"DEEPINFRA_API_KEY": "di-key"}, main_key="oxlo-key")
+    assert [o.label for o in without] == ["GLM-5"]
+    assert [o.label for o in with_key] == [
+        "GLM-5", "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)",
+    ]
+
+
+def test_glm_5_is_offered_only_when_the_main_key_is_set():
+    options = logic.available_models({"DEEPINFRA_API_KEY": "di-key"}, main_key="")
+    assert "GLM-5" not in [o.label for o in options]
+    assert logic.available_models({}, main_key="") == []
 
 
 # Status in plain English.
