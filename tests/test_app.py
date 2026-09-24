@@ -319,14 +319,14 @@ def test_a_pasted_title_is_escaped_too(stub):
 # Choosing a model.
 
 
-def test_the_model_menu_offers_every_available_model(stub):
+def test_the_model_menu_offers_every_available_model_with_glm_5_last(stub):
     at = start()
 
     no_crash(at)
     assert at.selectbox(key="model").options == [
-        "GLM-5", "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)",
+        "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)", "GLM-5",
     ]
-    assert at.selectbox(key="model").value == "GLM-5"
+    assert at.selectbox(key="model").value == "Gemma 4 31B"
 
 
 def test_the_chosen_model_writes_the_quick_read(stub):
@@ -350,7 +350,7 @@ def test_changing_the_model_hides_the_old_quick_read(stub):
     at = paste(start(), ENGLISH)
     assert REPLIES["English"] in page_text(at)
 
-    at.selectbox(key="model").select("Gemma 4 31B").run()
+    at.selectbox(key="model").select("GLM-5").run()
 
     assert REPLIES["English"] not in page_text(at)
 

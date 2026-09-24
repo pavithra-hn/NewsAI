@@ -203,8 +203,9 @@ class RunOutcome:
     protected: ProtectedTerms = field(default_factory=ProtectedTerms)
 
 
-# Models a reader can choose from. GLM-5 runs on the main provider from the
-# settings; the others run on DeepInfra with their own key.
+# Models a reader can choose from, the first being the default. GLM-5 runs on
+# the main provider from the settings, so it comes last; the others run on
+# DeepInfra with their own key.
 
 DEEPINFRA_URL = "https://api.deepinfra.com/v1/openai"
 DEEPINFRA_KEY = "DEEPINFRA_API_KEY"
@@ -227,11 +228,11 @@ class ModelOption:
 
 
 MODEL_OPTIONS = (
-    ModelOption("GLM-5", "glm-5", on_deepinfra=False),
     ModelOption("Gemma 4 31B", "google/gemma-4-31B-it", on_deepinfra=True),
     ModelOption("GLM-5.3 Flash", "zai-org/GLM-5.3-Flash", on_deepinfra=True),
     ModelOption("GLM-5.2 (slow)", "zai-org/GLM-5.2", on_deepinfra=True, max_tokens=THINKING_BUDGET),
     ModelOption("GLM-5.3 (slow)", "zai-org/GLM-5.3", on_deepinfra=True, max_tokens=THINKING_BUDGET),
+    ModelOption("GLM-5", "glm-5", on_deepinfra=False),
 )
 
 

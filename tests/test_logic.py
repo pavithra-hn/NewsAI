@@ -311,7 +311,7 @@ def test_deepinfra_models_are_offered_only_when_their_key_is_set():
     with_key = logic.available_models({"DEEPINFRA_API_KEY": "di-key"}, main_key="oxlo-key")
     assert [o.label for o in without] == ["GLM-5"]
     assert [o.label for o in with_key] == [
-        "GLM-5", "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)",
+        "Gemma 4 31B", "GLM-5.3 Flash", "GLM-5.2 (slow)", "GLM-5.3 (slow)", "GLM-5",
     ]
 
 
