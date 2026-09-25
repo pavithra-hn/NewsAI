@@ -7,7 +7,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app.providers.base import Completion, ProviderError
-from demo import logic
+from demo import humanize, logic
 from tests.test_logic import ARABIC, CORPUS, ENGLISH, FRENCH
 
 APP = str(Path(__file__).resolve().parents[1] / "demo" / "streamlit_app.py")
@@ -412,7 +412,7 @@ def test_humanize_shows_the_rewrite_and_its_checks(stub):
     assert "Every figure and model name from the original is kept." in text
     assert "much shorter" in text
     assert "Dashes: 0" in text
-    assert stub.calls == 1
+    assert stub.calls == humanize.CANDIDATES
 
 
 def test_humanize_asks_for_the_whole_text_not_a_summary(stub):
@@ -441,4 +441,4 @@ def test_humanize_counts_toward_the_daily_limit(stub, monkeypatch):
     at = humanize_text(at, FRENCH)
 
     assert "daily limit" in page_text(at)
-    assert stub.calls == 1
+    assert stub.calls == humanize.CANDIDATES

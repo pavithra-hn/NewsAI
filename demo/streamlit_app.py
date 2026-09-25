@@ -306,7 +306,7 @@ def run_humanize(text: str, locale: str) -> dict:
     try:
         with st.spinner(waiting):
             result = logic.run_sync(humanize.run_humanize(
-                text, locale, lambda: logic.make_provider(model), model.model
+                text, locale, lambda: logic.make_provider(model, sampling=humanize.SAMPLING), model.model
             ))
     except Exception:
         logging.getLogger("newsai.demo").exception("humanize failed")
@@ -334,7 +334,7 @@ def humanized_html(result: humanize.HumanizeResult, locale: str, model_label: st
             f'<p class="qr-problem" dir="ltr">{problem}</p></div>'
         )
     check = result.check
-    retried = ", after a second attempt" if result.attempts > 1 else ""
+    retried = ", after a correction" if result.corrected else ""
     meta = (
         f'<p class="qr-meta" dir="ltr">{check.words_in} words in, {check.words_out} out, '
         f"{result.seconds:.1f} seconds, {html.escape(model_label)}{retried}</p>"

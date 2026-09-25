@@ -261,11 +261,52 @@ class TokenBudget:
         await self._provider.aclose()
 
 
-def make_provider(option: ModelOption | None = None, environ: Mapping | None = None):
+@dataclass(frozen=True)
+class Sampling:
+    """How freely the model picks its words, beyond temperature."""
+
+    top_p: float
+    frequency_penalty: float
+    presence_penalty: float
+
+
+class SamplingProvider(LLMProvider):
+    """The pipeline's provider, sending sampling settings with every request.
+
+    The pipeline snapshot in app/ is never edited here, so this reuses its own
+    request and parsing and only adds three fields to the payload.
+    """
+
+    def __init__(self, *args, sampling: Sampling, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.sampling = sampling
+
+    async def complete(self, messages, *, model, temperature=0.3, max_tokens=400):
+        payload = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "top_p": self.sampling.top_p,
+            "frequency_penalty": self.sampling.frequency_penalty,
+            "presence_penalty": self.sampling.presence_penalty,
+        }
+        response = await self._post_with_retry(payload)
+        return self._parse(response, model)
+
+
+def make_provider(
+    option: ModelOption | None = None,
+    environ: Mapping | None = None,
+    sampling: Sampling | None = None,
+):
+    def build(**kwargs):
+        return SamplingProvider(sampling=sampling, **kwargs) if sampling else LLMProvider(**kwargs)
+
     if option is None or not option.on_deepinfra:
-        return LLMProvider()
+        return build()
     environ = os.environ if environ is None else environ
-    provider = LLMProvider(base_url=DEEPINFRA_URL, api_key=environ.get(DEEPINFRA_KEY, ""))
+    provider = build(base_url=DEEPINFRA_URL, api_key=environ.get(DEEPINFRA_KEY, ""))
     if option.max_tokens:
         return TokenBudget(provider, option.max_tokens)
     return provider
