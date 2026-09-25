@@ -122,3 +122,36 @@ def test_a_word_file_keeps_arabic_text():
     text = "المواصفات\n• المحرك: 286 حصاناً"
 
     assert files.read_upload("out.docx", files.to_docx(text)) == text
+
+
+# Found writing the 966H download: Word numbers every "List Number" paragraph as
+# one list, so section headings 1 to 5 pushed the checklist on to 6 to 13.
+
+
+def word_paragraphs(data: bytes):
+    return [(p.style.name, p.text) for p in docx.Document(io.BytesIO(data)).paragraphs]
+
+
+def test_a_word_download_keeps_every_number_exactly_as_written():
+    text = "1. Section one\n\u2022 Item\n2. Section two\n1. Check the brakes\n2. Check the tires"
+
+    paragraphs = word_paragraphs(files.to_docx(text))
+
+    assert [style for style, _ in paragraphs if style.startswith("List Number")] == []
+    assert [t for _, t in paragraphs] == [
+        "1. Section one", "Item", "2. Section two", "1. Check the brakes", "2. Check the tires",
+    ]
+
+
+def test_a_bullet_followed_by_a_tab_becomes_a_word_bullet():
+    paragraphs = word_paragraphs(files.to_docx("\u2022\tEngine: 286 hp"))
+
+    assert paragraphs == [("List Bullet", "Engine: 286 hp")]
+
+
+def test_a_text_with_tabbed_bullets_reads_back_with_the_same_content():
+    text = "Intro line\n\u2022\tEngine: 286 hp\n1.\tBrakes: check wear"
+
+    back = files.read_upload("out.docx", files.to_docx(text))
+
+    assert back.splitlines() == ["Intro line", "\u2022 Engine: 286 hp", "1.\tBrakes: check wear"]

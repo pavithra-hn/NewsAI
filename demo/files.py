@@ -5,7 +5,6 @@ same structure the reader does and the rewrite can keep it.
 """
 
 import io
-import re
 import zipfile
 from pathlib import PurePath
 
@@ -18,7 +17,6 @@ from pypdf.errors import PdfReadError
 
 SUPPORTED = (".docx", ".pdf", ".txt")
 BULLET = "• "
-NUMBERED = re.compile(r"^(\d+)\.\s+(.*)$")
 
 
 class ExtractError(ValueError):
@@ -88,17 +86,19 @@ def _read_pdf(data: bytes) -> str:
 
 
 def to_docx(text: str) -> bytes:
-    """A Word file of the text, with "• " and "1. " lines as real lists."""
+    """A Word file of the text, with bullet lines as real Word bullets.
+
+    Numbered lines keep their numbers as written. Word counts every numbered-list
+    paragraph in a file as one list, so section headings numbered 1 to 5 would
+    renumber a checklist that follows them as 6 onwards.
+    """
     document = docx.Document()
     for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
-        numbered = NUMBERED.match(line)
-        if line.startswith(BULLET):
-            document.add_paragraph(line[len(BULLET):], style="List Bullet")
-        elif numbered:
-            document.add_paragraph(numbered.group(2), style="List Number")
+        if line.startswith(BULLET.strip()):
+            document.add_paragraph(line[1:].strip(), style="List Bullet")
         else:
             document.add_paragraph(line)
     out = io.BytesIO()
