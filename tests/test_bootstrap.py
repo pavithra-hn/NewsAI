@@ -59,7 +59,7 @@ if "key is missing" in text:
 elif text:
     print("ERROR " + text)
 else:
-    print("OPEN" if len(at.tabs) == 2 else "NO TABS")
+    print("OPEN" if len(at.tabs) == 3 else "NO TABS")
 """
     out = subprocess.run(
         [sys.executable, "-c", script], cwd=ROOT, capture_output=True, text=True, timeout=120, check=False

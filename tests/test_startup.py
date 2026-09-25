@@ -23,7 +23,7 @@ at.run()
 problems = [e.message for e in at.exception]
 print("EXCEPTIONS", problems)
 print("TABS", len(at.tabs))
-sys.exit(1 if problems or len(at.tabs) != 2 else 0)
+sys.exit(1 if problems or len(at.tabs) != 3 else 0)
 """
 
 
@@ -37,7 +37,7 @@ def test_the_page_starts_in_a_fresh_interpreter(tmp_path):
     )
 
     assert run.returncode == 0, run.stdout[-2000:] + run.stderr[-2000:]
-    assert "TABS 2" in run.stdout
+    assert "TABS 3" in run.stdout
 
 
 def test_nothing_in_demo_can_shadow_the_pipeline_package():

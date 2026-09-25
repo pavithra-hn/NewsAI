@@ -23,7 +23,7 @@ from demo import bootstrap
 
 bootstrap.export_secrets(bootstrap.read_streamlit_secrets(), os.environ)
 
-from demo import logic
+from demo import files, humanize, logic
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -140,6 +140,13 @@ STYLE = """
 /* Length and time, quietly, under the quick read. */
 .stApp .qr-meta { margin: 0.9rem 0 0; color: var(--graphite); font-size: 0.92rem; font-family: var(--ui); }
 
+/* A humanized text keeps its lines, sections and lists. */
+.stApp .hz-text { white-space: pre-wrap; }
+.stApp .hz-checks { margin: 0.9rem 0 0; padding: 0; list-style: none; font-family: var(--ui); font-size: 0.95rem; line-height: 1.55; color: var(--graphite); }
+.stApp .hz-checks li { margin: 0.2rem 0; }
+.stApp .hz-checks .ok { color: var(--cobalt); }
+.stApp .hz-checks .bad { color: var(--blocked); }
+
 @media (max-width: 760px) {
   .stApp .mast-title { grid-template-columns: 1fr; gap: 0.25rem; white-space: normal; }
 }
@@ -154,7 +161,8 @@ MASTHEAD = """
     <span lang="ar" dir="rtl">قراءة سريعة</span>
   </div>
   <p class="mast-lede">Paste a news article, or pick one of ours. You get a short summary
-  in the article's own language, with every figure kept exactly.</p>
+  in the article's own language, with every figure kept exactly. Or humanize a text: the
+  same content, rewritten so it reads as a person wrote it.</p>
 </header>
 """
 
@@ -250,14 +258,18 @@ def quick_read_html(outcome: logic.RunOutcome, title: str, model_label: str) -> 
     )
 
 
+def limit_notice() -> dict:
+    return {
+        "notice": (
+            f"The demo has reached its daily limit of {counter.limit} runs. "
+            "It resets tomorrow."
+        )
+    }
+
+
 def run(article_id: int, locale: str, client) -> dict:
     if not counter.try_consume(1):
-        return {
-            "notice": (
-                f"The demo has reached its daily limit of {counter.limit} runs. "
-                "It resets tomorrow."
-            )
-        }
+        return limit_notice()
     waiting = "Writing the quick read"
     if model.slow:
         waiting += ". This model can take several minutes"
@@ -285,7 +297,57 @@ def show_quick_read(result: dict | None, title: str, empty: str) -> None:
         )
 
 
-paste_tab, sample_tab = st.tabs(["Paste article", "Sample articles"])
+def run_humanize(text: str, locale: str) -> dict:
+    if not counter.try_consume(1):
+        return limit_notice()
+    waiting = "Rewriting the text"
+    if model.slow:
+        waiting += ". This model can take several minutes"
+    try:
+        with st.spinner(waiting):
+            result = logic.run_sync(humanize.run_humanize(
+                text, locale, lambda: logic.make_provider(model), model.model
+            ))
+    except Exception:
+        logging.getLogger("newsai.demo").exception("humanize failed")
+        return {"notice": logic.UNEXPECTED}
+    return {"result": result, "locale": locale, "model": model.label}
+
+
+def checks_html(check: humanize.HumanizeCheck) -> str:
+    items = []
+    if check.facts_ok:
+        items.append('<li class="ok">Every figure and model name from the original is kept.</li>')
+    items.extend(f'<li class="bad">{html.escape(problem)}</li>' for problem in check.problems)
+    left = ", ".join(check.stock) if check.stock else "none"
+    items.append(f"<li>AI-style words left: {html.escape(left)}</li>")
+    items.append(f"<li>Dashes: {check.dashes}</li>")
+    return f'<ul class="hz-checks" dir="ltr">{"".join(items)}</ul>'
+
+
+def humanized_html(result: humanize.HumanizeResult, locale: str, model_label: str) -> str:
+    head = f'<p class="qr-lang">{NATIVE_NAMES[locale]}</p>'
+    if not result.text:
+        problem = html.escape(result.error or logic.UNEXPECTED)
+        return (
+            f'<div class="qr blocked" lang="{locale}"{rtl(locale)}>{head}'
+            f'<p class="qr-problem" dir="ltr">{problem}</p></div>'
+        )
+    check = result.check
+    retried = ", after a second attempt" if result.attempts > 1 else ""
+    meta = (
+        f'<p class="qr-meta" dir="ltr">{check.words_in} words in, {check.words_out} out, '
+        f"{result.seconds:.1f} seconds, {html.escape(model_label)}{retried}</p>"
+    )
+    # Model output is escaped before it reaches the page.
+    return (
+        f'<div class="qr" lang="{locale}"{rtl(locale)}>{head}'
+        f'<p class="qr-text hz-text">{html.escape(result.text)}</p>'
+        f"{checks_html(check)}{meta}</div>"
+    )
+
+
+paste_tab, sample_tab, humanize_tab = st.tabs(["Paste article", "Sample articles", "Humanize"])
 
 with paste_tab:
     left, right = st.columns([1.1, 1], gap="large")
@@ -349,3 +411,63 @@ with sample_tab:
         show_quick_read(
             current, version["title"], "Press Quick read to summarise this article."
         )
+
+with humanize_tab:
+    left, right = st.columns([1.1, 1], gap="large")
+
+    with left:
+        heading("Your text")
+        upload = st.file_uploader(
+            "Upload a file", type=["docx", "pdf", "txt"], key="hz_file",
+            help="A Word file, a PDF with text in it, or a plain text file. Or paste below.",
+        )
+        # A new upload replaces the box once; editing the text afterwards is kept.
+        if upload is not None and st.session_state.get("hz_loaded") != (upload.name, upload.size):
+            try:
+                st.session_state.hz_body = files.read_upload(upload.name, upload.getvalue())
+                st.session_state.hz_file_error = None
+            except files.ExtractError as exc:
+                st.session_state.hz_file_error = str(exc)
+            st.session_state.hz_loaded = (upload.name, upload.size)
+        if st.session_state.get("hz_file_error"):
+            st.warning(st.session_state.hz_file_error)
+        body = st.text_area(
+            "Content",
+            key="hz_body",
+            height=380,
+            placeholder="Paste the text to humanize, in English, French or Arabic.",
+        )
+        if st.button("Humanize", key="hz_go", type="primary"):
+            check = humanize.check_input(body)
+            outcome = run_humanize(body, check.locale) if check.ok else {"notice": check.message}
+            st.session_state.hz_result = {"for": (body, model.label), **outcome}
+
+    with right:
+        heading("Humanized")
+        saved = st.session_state.get("hz_result")
+        current = saved if saved and saved.get("for") == (body, model.label) else None
+        if not current:
+            st.markdown(
+                '<div class="empty">Paste or upload a text and press Humanize. The same '
+                "content comes back rewritten so it reads as a person wrote it, with every "
+                "figure kept.</div>",
+                unsafe_allow_html=True,
+            )
+        elif current.get("notice"):
+            st.warning(current["notice"])
+        else:
+            result = current["result"]
+            st.markdown(
+                humanized_html(result, current["locale"], current["model"]), unsafe_allow_html=True
+            )
+            if result.text:
+                word, plain = st.columns(2)
+                word.download_button(
+                    "Download .docx", files.to_docx(result.text), file_name="humanized.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    key="hz_docx",
+                )
+                plain.download_button(
+                    "Download .txt", result.text.encode("utf-8"), file_name="humanized.txt",
+                    mime="text/plain", key="hz_txt",
+                )

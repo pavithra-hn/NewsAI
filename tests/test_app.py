@@ -92,7 +92,7 @@ def test_the_page_opens_straight_away_with_no_password(stub):
     at = start()
 
     no_crash(at)
-    assert [tab.label for tab in at.tabs] == ["Paste article", "Sample articles"]
+    assert [tab.label for tab in at.tabs] == ["Paste article", "Sample articles", "Humanize"]
     assert [t.key for t in at.text_input] == ["paste_title"]
 
 
@@ -377,3 +377,68 @@ def test_choosing_a_slow_model_keeps_the_reader_on_their_tab(stub):
     at.selectbox(key="model").select("GLM-5.2 (slow)").run()
 
     assert tabs_position(at) == before
+
+
+# Humanize tab: the same content back, rewritten so it reads as a person wrote it.
+
+
+def humanize_text(at, body):
+    at.text_area(key="hz_body").input(body)
+    at.button(key="hz_go").click().run()
+    return at
+
+
+def test_the_humanize_tab_has_a_content_box_and_its_own_button(stub):
+    at = start()
+
+    assert at.button(key="hz_go").label == "Humanize"
+    assert at.text_area(key="hz_body").value == ""
+
+
+def test_humanize_with_an_empty_box_asks_for_text_and_spends_nothing(stub):
+    at = humanize_text(start(), "")
+
+    no_crash(at)
+    assert "Paste or upload the text to humanize." in page_text(at)
+    assert stub.calls == 0
+
+
+def test_humanize_shows_the_rewrite_and_its_checks(stub):
+    at = humanize_text(start(), ENGLISH)
+
+    no_crash(at)
+    text = page_text(at)
+    assert REPLIES["English"] in text
+    assert "Every figure and model name from the original is kept." in text
+    assert "much shorter" in text
+    assert "Dashes: 0" in text
+    assert stub.calls == 1
+
+
+def test_humanize_asks_for_the_whole_text_not_a_summary(stub):
+    humanize_text(start(), ENGLISH)
+
+    assert "Rewrite the text you are given" in stub.prompts[0]
+    assert "Do not shorten it into a summary" in stub.prompts[0]
+
+
+def test_humanize_writes_in_the_language_of_the_text(stub):
+    at = humanize_text(start(), FRENCH)
+
+    assert REPLIES["French"] in page_text(at)
+
+
+def test_a_humanized_text_is_hidden_once_the_text_changes(stub):
+    at = humanize_text(start(), ENGLISH)
+    at.text_area(key="hz_body").input(FRENCH).run()
+
+    assert REPLIES["English"] not in page_text(at)
+
+
+def test_humanize_counts_toward_the_daily_limit(stub, monkeypatch):
+    monkeypatch.setenv("DEMO_DAILY_LIMIT", "1")
+    at = humanize_text(start(), ENGLISH)
+    at = humanize_text(at, FRENCH)
+
+    assert "daily limit" in page_text(at)
+    assert stub.calls == 1

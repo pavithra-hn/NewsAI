@@ -2,6 +2,10 @@
 streamlit>=1.40
 python-dotenv>=1.0
 
+# Reading uploads on the Humanize tab, and writing its Word download.
+python-docx>=1.1
+pypdf>=5.0
+
 # What the vendored pipeline in app/ needs at runtime. app/ is a snapshot of
 # news-ai-helper, see scripts/sync_pipeline.py and PIPELINE_VERSION.
 httpx>=0.28

@@ -12,6 +12,14 @@ pipeline version it runs.
 Nothing is translated. The language of a pasted article is detected from its
 text, and it is summarised in that language.
 
+The **Humanize** tab does not summarise. Paste a text or upload a `.docx`, `.pdf`
+or `.txt` file, and the same content comes back rewritten so it reads as a person
+wrote it: same sections and lists, no stock phrases, no dashes. Under the result
+the page checks that every figure and model name from the original is still
+there, and that the length and language are unchanged. If figures go missing,
+the model is asked once more, with the missing ones named. The rewrite can be
+downloaded as Word or plain text. A PDF must carry text; a scan is refused.
+
 ## Requirements
 
 - Python 3.11
@@ -116,6 +124,8 @@ include it.
 demo/streamlit_app.py  the page
 .streamlit/config.toml the page's colours and chrome (not a secret)
 demo/logic.py          everything the page does: checks, running, limits, settings
+demo/humanize.py       the Humanize tab: the rewrite prompt, its checks, one retry
+demo/files.py          reading .docx, .pdf and .txt uploads; writing the Word download
 demo/bootstrap.py      copies Streamlit secrets into the environment, first
 app/                   the pipeline snapshot, see PIPELINE_VERSION
 data/corpus.json       the sample articles
