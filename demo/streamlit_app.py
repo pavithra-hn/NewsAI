@@ -23,7 +23,7 @@ from demo import bootstrap
 
 bootstrap.export_secrets(bootstrap.read_streamlit_secrets(), os.environ)
 
-from demo import files, humanize, logic
+from demo import files, humanize, logic, voice
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -277,7 +277,8 @@ def run(article_id: int, locale: str, client) -> dict:
         with st.spinner(waiting):
             outcomes = logic.run_sync(logic.run_quick_reads(
                 article_id, [locale], client,
-                provider_factory=lambda: logic.make_provider(model), model=model.model,
+                provider_factory=lambda: voice.VoiceProvider(logic.make_provider(model)),
+                model=model.model,
             ))
     except Exception:
         logging.getLogger("newsai.demo").exception("run failed")

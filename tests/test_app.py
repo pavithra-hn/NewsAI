@@ -7,7 +7,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app.providers.base import Completion, ProviderError
-from demo import humanize, logic
+from demo import humanize, logic, voice
 from tests.test_logic import ARABIC, CORPUS, ENGLISH, FRENCH
 
 APP = str(Path(__file__).resolve().parents[1] / "demo" / "streamlit_app.py")
@@ -264,6 +264,19 @@ def test_a_sample_quick_read_is_one_language(stub):
     assert REPLIES["English"] in text
     assert REPLIES["French"] not in text
     assert stub.calls == 1
+
+
+def test_a_pasted_article_is_summarised_in_the_desk_voice(stub):
+    paste(start(), body=ENGLISH)
+    assert voice.DESK_START in stub.prompts[0]
+
+
+def test_a_sample_is_summarised_in_the_desk_voice(stub):
+    at = start()
+    at.selectbox(key="sample_article").select(11)
+    at.radio(key="sample_lang").set_value("English").run()
+    at.button(key="sample_go").click().run()
+    assert voice.DESK_START in stub.prompts[0]
 
 
 # Things going wrong, in front of an audience.
