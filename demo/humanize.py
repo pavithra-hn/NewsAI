@@ -29,7 +29,7 @@ from demo.logic import (
 
 log = logging.getLogger("newsai.demo")
 
-DASHES = ("—", "–")
+DASHES = ("\u2014", "\u2013")
 
 # A rewrite this much shorter or longer than the original has summarised or padded it.
 MIN_RATIO, MAX_RATIO = 0.7, 1.4
@@ -91,7 +91,7 @@ Write it the way a person does:
 - vary the length of the sentences, and vary how list items begin;
 - use plain, specific verbs such as "has", "uses", "weighs" and "runs";
 - never use these words or phrases: {avoid};
-- never use the long dashes — or –. Use commas, full stops or "to" \
+- never use the long dashes \u2014 or \u2013. Use commas, full stops or "to" \
 instead. Hyphens are different: keep the hyphen in compound words and model names, \
 as in heavy-duty, load-sensing and WA380-8;
 - no hype, no opinions and no new claims;

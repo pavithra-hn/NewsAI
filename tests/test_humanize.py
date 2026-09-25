@@ -7,7 +7,7 @@ from demo import humanize
 
 SOURCE = (
     "The Cat 966H is powered by an 11.1 L C11 ACERT engine that delivers 286 hp (213 kW). "
-    "It weighs 23,125 kg and was built from 2011–2012.\n"
+    "It weighs 23,125 kg and was built from 2011\u20132012.\n"
     "• Tires: 26.5R25\n"
     "• Rivals: Komatsu WA380-8 and Volvo L120H."
 )
@@ -109,7 +109,7 @@ def test_figures_are_listed_once_and_without_stray_punctuation():
 
 
 def test_dashes_are_counted():
-    check = humanize.check(SOURCE, GOOD + " Strong — and fast – always.", "en")
+    check = humanize.check(SOURCE, GOOD + " Strong \u2014 and fast \u2013 always.", "en")
 
     assert check.dashes == 2
 
