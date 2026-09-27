@@ -46,14 +46,14 @@ UNEXPECTED = "Something went wrong with this run. It has been logged, please try
 # accents. Brand names and model codes are neutral, which is why an Arabic
 # article carrying "Volvo Construction Equipment" still reads as Arabic.
 
-ARABIC_LETTER = re.compile(r"[؀-ۿ]")
-LATIN_LETTER = re.compile(r"[A-Za-zÀ-ÿœŒ]")
-LATIN_WORD = re.compile(r"[a-zà-ÿœ]+")
+ARABIC_LETTER = re.compile(r"[ÃƒËœÃ¢â€šÂ¬-Ãƒâ€ºÃ‚Â¿]")
+LATIN_LETTER = re.compile(r"[A-Za-zÃƒÆ’Ã¢â€šÂ¬-ÃƒÆ’Ã‚Â¿Ãƒâ€¦Ã¢â‚¬Å“Ãƒâ€¦Ã¢â‚¬â„¢]")
+LATIN_WORD = re.compile(r"[a-zÃƒÆ’Ã‚Â -ÃƒÆ’Ã‚Â¿Ãƒâ€¦Ã¢â‚¬Å“]+")
 
 FRENCH_WORDS = frozenset({
     "le", "la", "les", "des", "du", "de", "et", "est", "une", "un", "pour", "dans",
     "avec", "sur", "qui", "que", "au", "aux", "par", "ce", "cette", "ces", "ses", "son",
-    "sa", "leur", "leurs", "plus", "en", "ne", "pas", "été", "sont", "ont", "il", "elle",
+    "sa", "leur", "leurs", "plus", "en", "ne", "pas", "ÃƒÆ’Ã‚Â©tÃƒÆ’Ã‚Â©", "sont", "ont", "il", "elle",
     "l", "d",
 })
 ENGLISH_WORDS = frozenset({
@@ -61,7 +61,7 @@ ENGLISH_WORDS = frozenset({
     "as", "at", "this", "its", "are", "was", "were", "has", "have", "had", "will", "be",
     "an", "it", "which", "their",
 })
-FRENCH_ACCENTS = frozenset("éèêëàâçîïôûùœ")
+FRENCH_ACCENTS = frozenset("ÃƒÆ’Ã‚Â©ÃƒÆ’Ã‚Â¨ÃƒÆ’Ã‚ÂªÃƒÆ’Ã‚Â«ÃƒÆ’Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÆ’Ã‚Â§ÃƒÆ’Ã‚Â®ÃƒÆ’Ã‚Â¯ÃƒÆ’Ã‚Â´ÃƒÆ’Ã‚Â»ÃƒÆ’Ã‚Â¹Ãƒâ€¦Ã¢â‚¬Å“")
 
 MIN_LETTERS = 20
 
@@ -228,6 +228,10 @@ class ModelOption:
 
 
 MODEL_OPTIONS = (
+    ModelOption("Mistral Small 3.2", "mistralai/Mistral-Small-3.2-24B-Instruct-2506", on_deepinfra=True),
+    ModelOption("DeepSeek V4.1 Flash", "deepseek-ai/DeepSeek-V4.1-Flash", on_deepinfra=True),
+    ModelOption("Qwen3 235B", "Qwen/Qwen3-235B-A22B-Instruct-2507", on_deepinfra=True),
+    ModelOption("Qwen3 32B", "Qwen/Qwen3-32B", on_deepinfra=True),
     ModelOption("Gemma 4 31B", "google/gemma-4-31B-it", on_deepinfra=True),
     ModelOption("GLM-5.3 Flash", "zai-org/GLM-5.3-Flash", on_deepinfra=True),
     ModelOption("GLM-5.2 (slow)", "zai-org/GLM-5.2", on_deepinfra=True, max_tokens=THINKING_BUDGET),
@@ -252,9 +256,9 @@ class TokenBudget:
         self._provider = provider
         self.max_tokens = max_tokens
 
-    async def complete(self, messages, *, model, temperature=0.3, max_tokens=400):
+    async def complete(self, messages, *, model, temperature=0.3, max_tokens=400, **kwargs):
         return await self._provider.complete(
-            messages, model=model, temperature=temperature, max_tokens=self.max_tokens
+            messages, model=model, temperature=temperature, max_tokens=self.max_tokens, **kwargs
         )
 
     async def aclose(self) -> None:
@@ -281,15 +285,15 @@ class SamplingProvider(LLMProvider):
         super().__init__(*args, **kwargs)
         self.sampling = sampling
 
-    async def complete(self, messages, *, model, temperature=0.3, max_tokens=400):
+    async def complete(self, messages, *, model, temperature=0.3, max_tokens=400, **kwargs):
         payload = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
-            "top_p": self.sampling.top_p,
-            "frequency_penalty": self.sampling.frequency_penalty,
-            "presence_penalty": self.sampling.presence_penalty,
+            "top_p": kwargs.get("top_p", self.sampling.top_p),
+            "frequency_penalty": kwargs.get("frequency_penalty", self.sampling.frequency_penalty),
+            "presence_penalty": kwargs.get("presence_penalty", self.sampling.presence_penalty),
         }
         response = await self._post_with_retry(payload)
         return self._parse(response, model)

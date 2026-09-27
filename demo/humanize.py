@@ -33,6 +33,7 @@ from demo.logic import (
     Sampling,
     detect_language,
 )
+from demo.style import TELL_PATTERNS, TELLS
 
 log = logging.getLogger("newsai.demo")
 
@@ -73,30 +74,6 @@ NOT_NAMES = frozenset({
     "But", "With", "For", "From", "According", "Also", "After", "Before", "While",
 })
 NAME = re.compile(r"(?<![\w-])[A-Z][A-Za-z&'.-]{2,}(?![\w-])")
-
-# Words that mark trade copy as machine-written, on top of the pipeline's own list.
-TELLS = {
-    "en": (
-        "ensure", "ensures", "ensuring", "boast", "boasts", "boasting", "robust",
-        "seamless", "seamlessly", "cutting-edge", "state-of-the-art", "well-suited",
-        "furthermore", "moreover", "additionally", "notably", "leverage", "leverages",
-        "comprehensive", "unparalleled", "renowned", "delve", "plays a crucial role",
-        "plays a key role", "in today's",
-    ),
-    "fr": (
-        "par ailleurs", "en outre", "de surcroît", "garantit", "garantissant", "robuste",
-        "de pointe", "incontournable", "joue un rôle clé", "joue un rôle essentiel",
-    ),
-    "ar": (
-        "علاوة على ذلك", "بالإضافة إلى ذلك", "فضلاً عن ذلك", "يضمن", "تضمن", "يتميز", "تتميز",
-    ),
-}
-_TELL_PATTERNS = {
-    locale: re.compile(
-        r"(?<!\w)(?:" + "|".join(re.escape(word) for word in words) + r")(?!\w)", re.IGNORECASE
-    )
-    for locale, words in TELLS.items()
-}
 
 RULES = """You are a reporter on the news desk of a trade publication about \
 construction, mining and heavy equipment. Write in {language}.
@@ -297,7 +274,7 @@ def _leaked_names(source: str, output: str) -> tuple[str, ...]:
 
 def check(source: str, output: str, locale: str, finish_reason: str | None = None) -> HumanizeCheck:
     codes = protect(source, locale).model_codes
-    tells = [match.lower() for match in _TELL_PATTERNS[locale].findall(output)]
+    tells = [match.lower() for match in TELL_PATTERNS[locale].findall(output)]
     lost = _hyphens_lost(source, output)
     return HumanizeCheck(
         locale=locale,
