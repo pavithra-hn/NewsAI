@@ -1,20 +1,26 @@
-"""The quick read capability.
+﻿"""The quick read capability.
 
 This handler owns no logic of its own. It composes the shared services in a
 fixed order, which is what keeps them reusable by whatever capability comes
 next.
 """
 
+import logging
+
 from dataclasses import dataclass
 
 from app.config import settings
 from app.glossary.terms import lookup
 from app.pipeline.clean import clean
+from app.pipeline.humanise_llm import build_humanise_messages
+from app.pipeline.humanise_nlp import humanise_nlp
 from app.pipeline.phrasing import stock_phrases
 from app.pipeline.protect import protect
 from app.pipeline.quality import CheckReport, HardFailure, check_output, check_source
 from app.pipeline.summarise import DEFAULT_TEMPERATURE, summarise
 from app.providers.base import ProviderError
+
+log = logging.getLogger("newsai.quick_read")
 
 # Each retry nudges the model further from the answer that just failed.
 TEMPERATURE_STEP = 0.2
@@ -166,12 +172,54 @@ async def handle(
             if not revised_report.hard and cleaner:
                 completion, report = revised, revised_report
 
+    # ── Layer 2: Cross-model humanisation ──
+    # Run the summary through a DIFFERENT model to break the statistical
+    # fingerprint. This is the single biggest lever for AI detection evasion.
+    summary_text = completion.text if completion else ""
+    if summary_text and not report.hard:
+        humaniser_model = settings.humaniser_model
+        # Only humanise if the humaniser is a different model
+        if humaniser_model and humaniser_model != model:
+            try:
+                humanise_messages = build_humanise_messages(summary_text, locale)
+                humanised = await provider.complete(
+                    humanise_messages,
+                    model=humaniser_model,
+                    temperature=0.85,
+                    max_tokens=400,
+                    top_p=0.95,
+                    frequency_penalty=0.4,
+                    presence_penalty=0.2,
+                )
+                cost += humanised.cost_usd
+                cost_known = cost_known and humanised.cost_known
+                # Verify the humanised version still passes quality checks
+                humanised_report = check_output(
+                    text, humanised.text, locale, protected,
+                    finish_reason=humanised.finish_reason,
+                )
+                if not humanised_report.hard:
+                    summary_text = humanised.text
+                    report = humanised_report
+                    log.info("Layer 2 humanisation applied successfully")
+                else:
+                    log.warning("Layer 2 humanised text failed checks, keeping original")
+            except ProviderError as exc:
+                log.warning("Layer 2 humanisation failed: %s, keeping original", exc)
+                cost_known = False
+
+    # ── Layer 3: NLP post-processing ──
+    # Replace AI-sounding vocabulary and insert contractions to further
+    # increase perplexity and reduce detectability.
+    if summary_text:
+        summary_text = humanise_nlp(summary_text, locale)
+
     return QuickRead(
         article_id=article_id,
         locale=locale,
         # The rejected text is kept on failure so there is a record of what
         # was refused.
-        text=completion.text if completion else "",
+        text=summary_text,
         checks=report,
         cost_usd=cost,
         cost_known=cost_known,

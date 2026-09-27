@@ -1,11 +1,11 @@
-"""Turns one article, in one locale, into one summary in that same language."""
+﻿"""Turns one article, in one locale, into one summary in that same language."""
 
 from app.config import settings
 from app.pipeline.prompts import build_prompt
 from app.pipeline.protect import ProtectedTerms
 from app.providers.base import Completion
 
-DEFAULT_TEMPERATURE = 0.3
+DEFAULT_TEMPERATURE = 0.75
 DEFAULT_MAX_TOKENS = 400
 
 

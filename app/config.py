@@ -1,4 +1,4 @@
-from pydantic import Field, field_validator
+﻿from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SUPPORTED_LOCALES = frozenset({"en", "ar", "fr"})
@@ -28,6 +28,10 @@ class Settings(BaseSettings):
         "ar": "qwen-3-32b",
         "fr": "qwen-3-32b",
     }
+
+    # Model used for the humanisation rewrite pass. Must be a different model
+    # from the generation model so the statistical signatures do not match.
+    humaniser_model: str = "deepseek-ai/DeepSeek-V4.1-Flash"
 
     # Words each language uses for the same content, relative to English.
     # Measured as the median, over the 25 corpus articles, of that language's

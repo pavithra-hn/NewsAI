@@ -6,6 +6,7 @@ same wire format, which is the point of going through one interface.
 """
 
 import asyncio
+import re
 
 import httpx
 
@@ -18,6 +19,11 @@ PRICES = {
     "qwen3-32b": Pricing(0.08, 0.28),
     "Qwen/Qwen3-32B": Pricing(0.08, 0.28),
     "Qwen/Qwen3-235B-A22B-Instruct-2507": Pricing(0.09, 0.55),
+    "deepseek-ai/DeepSeek-V4.1-Flash": Pricing(0.07, 0.34),
+    "google/gemma-4-31B-it": Pricing(0.13, 0.38),
+    "mistralai/Mistral-Small-3.2-24B-Instruct-2506": Pricing(0.075, 0.20),
+    "zai-org/GLM-5.3-Flash": Pricing(0.10, 0.30),
+    "zai-org/GLM-5.2": Pricing(0.15, 0.60),
 }
 
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504}
@@ -53,12 +59,18 @@ class LLMProvider:
         model: str,
         temperature: float = 0.3,
         max_tokens: int = 400,
+        top_p: float = 0.92,
+        frequency_penalty: float = 0.3,
+        presence_penalty: float = 0.15,
     ) -> Completion:
         payload = {
             "model": model,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens,
+            "top_p": top_p,
+            "frequency_penalty": frequency_penalty,
+            "presence_penalty": presence_penalty,
         }
 
         response = await self._post_with_retry(payload)
@@ -97,6 +109,9 @@ class LLMProvider:
 
         if text is None:
             raise ProviderError("the completion carried no content")
+
+        # Strip thinking tags from models that use them (e.g. Qwen3)
+        text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
 
         input_tokens = int(usage.get("prompt_tokens", 0))
         output_tokens = int(usage.get("completion_tokens", 0))

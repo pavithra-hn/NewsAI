@@ -497,3 +497,62 @@ def test_the_pasted_client_carries_an_optional_title():
 def test_an_article_is_split_into_its_paragraphs_for_reading():
     body = "<p>First <b>paragraph</b>.</p><p>&nbsp;</p><p>Second&nbsp;one.</p>"
     assert logic.paragraphs(body) == ["First paragraph .", "Second one."]
+
+
+# Sampling: the Humanize tab asks for less predictable wording than the quick read.
+
+SAMPLING = logic.Sampling(top_p=0.95, frequency_penalty=0.4, presence_penalty=0.3)
+
+
+def sent_payload(provider):
+    """Run one call through a fake DeepInfra and return the JSON it was sent."""
+    import httpx
+
+    seen = {}
+
+    def answer(request):
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 1},
+        })
+
+    async def go():
+        inner = provider._provider if isinstance(provider, logic.TokenBudget) else provider
+        inner._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(answer), base_url="https://api.deepinfra.com/v1/openai"
+        )
+        try:
+            await provider.complete([{"role": "user", "content": "x"}], model="m",
+                                    temperature=0.95, max_tokens=50)
+        finally:
+            await provider.aclose()
+
+    asyncio.run(go())
+    return seen
+
+
+def test_a_sampling_provider_sends_its_sampling_settings():
+    provider = logic.make_provider(by_label("Gemma 4 31B"), {"DEEPINFRA_API_KEY": "k"}, sampling=SAMPLING)
+
+    seen = sent_payload(provider)
+
+    assert (seen["top_p"], seen["frequency_penalty"], seen["presence_penalty"]) == (0.95, 0.4, 0.3)
+    assert (seen["temperature"], seen["max_tokens"]) == (0.95, 50)
+
+
+def test_without_sampling_no_sampling_settings_are_sent():
+    seen = sent_payload(logic.make_provider(by_label("Gemma 4 31B"), {"DEEPINFRA_API_KEY": "k"}))
+
+    assert not {"top_p", "frequency_penalty", "presence_penalty"} & set(seen)
+
+
+def test_a_slow_model_keeps_its_token_budget_and_its_sampling():
+    provider = logic.make_provider(
+        by_label("GLM-5.2 (slow)"), {"DEEPINFRA_API_KEY": "k"}, sampling=SAMPLING
+    )
+
+    assert isinstance(provider, logic.TokenBudget)
+    seen = sent_payload(provider)
+    assert seen["frequency_penalty"] == 0.4
+    assert seen["max_tokens"] == provider.max_tokens

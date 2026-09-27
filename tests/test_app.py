@@ -7,7 +7,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 from app.providers.base import Completion, ProviderError
-from demo import logic
+from demo import humanize, logic, voice
 from tests.test_logic import ARABIC, CORPUS, ENGLISH, FRENCH
 
 APP = str(Path(__file__).resolve().parents[1] / "demo" / "streamlit_app.py")
@@ -150,7 +150,8 @@ def test_an_english_article_gets_only_an_english_quick_read(stub):
     text = page_text(at)
     assert REPLIES["English"] in text
     assert REPLIES["French"] not in text and REPLIES["Arabic"] not in text
-    assert stub.calls == 1
+    # The article's notes, then the quick read written from them.
+    assert stub.calls == 2
 
 
 def test_the_language_is_detected_from_the_content(stub):
@@ -170,7 +171,7 @@ def test_an_arabic_quick_read_is_right_to_left(stub):
 
 def test_the_title_is_given_to_the_model(stub):
     paste(start(), body=ENGLISH, title="Volvo delivers twelve excavators to Oman")
-    assert "Volvo delivers twelve excavators to Oman" in stub.prompts[0]
+    assert "Volvo delivers twelve excavators to Oman" in stub.prompts[1]
 
 
 def test_the_title_is_optional(stub):
@@ -263,7 +264,20 @@ def test_a_sample_quick_read_is_one_language(stub):
     text = page_text(at)
     assert REPLIES["English"] in text
     assert REPLIES["French"] not in text
-    assert stub.calls == 1
+    assert stub.calls == 2
+
+
+def test_a_pasted_article_is_summarised_in_the_desk_voice(stub):
+    paste(start(), body=ENGLISH)
+    assert voice.DESK_START in stub.prompts[1]
+
+
+def test_a_sample_is_summarised_in_the_desk_voice(stub):
+    at = start()
+    at.selectbox(key="sample_article").select(11)
+    at.radio(key="sample_lang").set_value("English").run()
+    at.button(key="sample_go").click().run()
+    assert voice.DESK_START in stub.prompts[1]
 
 
 # Things going wrong, in front of an audience.
@@ -296,7 +310,8 @@ def test_the_daily_limit_is_polite_and_spends_nothing(stub, monkeypatch):
 
     no_crash(at)
     assert "daily limit" in page_text(at).lower()
-    assert stub.calls == 1
+    # Only the first quick read was paid for: its notes and its summary.
+    assert stub.calls == 2
 
 
 def test_model_output_is_escaped_not_rendered_as_html(stub):
@@ -412,7 +427,7 @@ def test_humanize_shows_the_rewrite_and_its_checks(stub):
     assert "Every figure and model name from the original is kept." in text
     assert "much shorter" in text
     assert "Dashes: 0" in text
-    assert stub.calls == 1
+    assert stub.calls == humanize.CANDIDATES
 
 
 def test_humanize_asks_for_the_whole_text_not_a_summary(stub):
@@ -441,4 +456,4 @@ def test_humanize_counts_toward_the_daily_limit(stub, monkeypatch):
     at = humanize_text(at, FRENCH)
 
     assert "daily limit" in page_text(at)
-    assert stub.calls == 1
+    assert stub.calls == humanize.CANDIDATES

@@ -149,43 +149,144 @@ def test_an_answer_cut_off_by_the_token_limit_is_flagged():
 # Running.
 
 
-def test_a_good_first_answer_is_not_retried():
+MISSING = [NO_213] * humanize.CANDIDATES
+
+
+def test_several_versions_are_written_and_a_clean_set_needs_no_correction():
     provider = Scripted(GOOD)
 
     result = run(provider)
 
-    assert len(provider.calls) == 1
-    assert result.attempts == 1
+    assert len(provider.calls) == humanize.CANDIDATES
+    assert result.attempts == humanize.CANDIDATES
     assert result.text == GOOD
     assert result.check.facts_ok
+    assert not result.corrected
 
 
-def test_a_missing_figure_gets_one_retry_that_names_it():
-    provider = Scripted(NO_213, GOOD)
+def test_when_every_version_loses_a_figure_one_correction_names_it():
+    provider = Scripted(*MISSING, GOOD)
 
     result = run(provider)
 
-    assert len(provider.calls) == 2
-    assert "213" in provider.calls[1]["messages"][-1]["content"]
-    assert result.attempts == 2
+    assert len(provider.calls) == humanize.CANDIDATES + 1
+    assert "213" in provider.calls[-1]["messages"][-1]["content"]
+    assert result.text == GOOD
+    assert result.corrected
+
+
+def test_the_better_version_is_kept_when_the_correction_is_worse():
+    worse = NO_213.replace("286", "about three hundred").replace("23,125", "many")
+
+    result = run(Scripted(*MISSING, worse))
+
+    assert result.text == NO_213
+    assert not result.corrected
+
+
+def test_the_cost_of_every_call_is_counted():
+    result = run(Scripted(*MISSING, GOOD))
+
+    assert result.cost_usd == pytest.approx(0.0002 * (humanize.CANDIDATES + 1))
+    assert result.cost_known
+
+
+def test_every_call_uses_the_same_high_temperature():
+    provider = Scripted(*MISSING, GOOD)
+
+    run(provider)
+
+    assert {call["temperature"] for call in provider.calls} == {humanize.TEMPERATURE}
+    assert humanize.TEMPERATURE >= 0.9
+
+
+def test_a_version_that_loses_a_fact_never_beats_one_that_keeps_them():
+    result = run(Scripted(NO_213, GOOD, NO_213))
+
     assert result.text == GOOD
 
 
-def test_the_better_attempt_is_kept_when_the_retry_is_worse():
-    worse = NO_213.replace("286", "about three hundred").replace("23,125", "many")
-    provider = Scripted(NO_213, worse)
+def test_among_versions_that_keep_every_fact_fewer_ai_words_win():
+    wordy = GOOD + " Furthermore, it ensures seamless loading."
 
-    result = run(provider)
+    result = run(Scripted(wordy, GOOD, wordy))
 
-    assert result.attempts == 2
-    assert result.text == NO_213
+    assert result.text == GOOD
 
 
-def test_the_cost_of_every_attempt_is_counted():
-    result = run(Scripted(NO_213, GOOD))
+def test_among_clean_versions_the_most_rewritten_wins():
+    near_copy = SOURCE.replace("\u2013", " to ")
 
-    assert result.cost_usd == pytest.approx(0.0004)
-    assert result.cost_known
+    result = run(Scripted(near_copy, GOOD, near_copy))
+
+    assert result.text == GOOD
+
+
+def test_one_failed_call_does_not_lose_the_others():
+    class OneFails(Scripted):
+        async def complete(self, messages, **kwargs):
+            if not self.calls:
+                self.calls.append(kwargs)
+                raise ProviderError("503 from the provider")
+            return await super().complete(messages, **kwargs)
+
+    result = run(OneFails(GOOD))
+
+    assert result.text == GOOD
+    assert result.error is None
+    assert not result.cost_known
+
+
+# The desk's own articles as the voice to copy (English only).
+
+
+def test_the_desk_examples_load_for_english_only():
+    english = humanize.style_examples("en")
+
+    assert len(english) >= 3
+    assert all(example["title"] and example["paragraphs"] for example in english)
+    assert humanize.style_examples("fr") == ()
+    assert humanize.style_examples("ar") == ()
+
+
+def test_the_english_prompt_carries_the_desk_examples_for_voice_only():
+    rules = humanize.build_messages(SOURCE, "en")[0]["content"]
+    first = humanize.style_examples("en")[0]["paragraphs"][0]
+
+    assert first[:60] in rules
+    assert "voice" in rules.lower()
+    assert "never take facts" in rules.lower()
+    assert "dateline" in rules.lower()
+
+
+def test_the_example_text_stays_within_its_word_budget():
+    rules = humanize.build_messages(SOURCE, "en")[0]["content"]
+    examples = rules.split(humanize.EXAMPLE_MARK, 1)[1]
+
+    assert len(examples.split()) <= humanize.MAX_EXAMPLE_WORDS + 50
+
+
+def test_french_and_arabic_prompts_carry_no_english_examples():
+    for locale in ("fr", "ar"):
+        assert humanize.EXAMPLE_MARK not in humanize.build_messages(SOURCE, locale)[0]["content"]
+
+
+def test_a_name_from_the_desk_examples_leaking_into_the_rewrite_is_flagged():
+    check = humanize.check(SOURCE, GOOD + " Kalmar handled the delivery.", "en")
+
+    assert "Kalmar" in check.leaked_names
+    assert not check.facts_ok
+    assert any("Kalmar" in problem for problem in check.problems)
+
+
+def test_a_name_the_source_itself_uses_is_not_a_leak():
+    check = humanize.check(SOURCE + " Kalmar also sells loaders.", GOOD + " Kalmar sells them too.", "en")
+
+    assert "Kalmar" not in check.leaked_names
+
+
+def test_the_clean_rewrite_leaks_nothing():
+    assert humanize.check(SOURCE, GOOD, "en").leaked_names == ()
 
 
 def test_a_provider_outage_gives_a_plain_message_and_no_text():
@@ -274,3 +375,13 @@ def test_model_code_hyphens_do_not_count_as_compound_words():
     check = humanize.check(SOURCE, GOOD, "en")
 
     assert check.hyphens_lost == 0
+
+
+# Measured on the 966H sheet: a frequency penalty of 0.5 with a presence penalty
+# of 0.3 made both models drop figures and one degenerate into gibberish, because
+# a spec sheet has to repeat its digits and units. Temperature alone is safe.
+
+
+def test_humanize_sends_no_repetition_penalties():
+    assert humanize.SAMPLING.frequency_penalty == 0
+    assert humanize.SAMPLING.presence_penalty == 0
